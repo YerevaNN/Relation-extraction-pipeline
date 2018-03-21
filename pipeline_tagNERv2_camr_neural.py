@@ -21,7 +21,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input_text', '-i', required=True, type=str)
     parser.add_argument('--output_json', '-o', required=True, type=str)
-    parser.add_argument('--tmp_dir', '-t', default='tmp', type=str)
+    parser.add_argument('--tmp_dir', '-t', default='results/tmp', type=str)
     parser.add_argument('--classifier_model', '-c', default='', type=str)
     args = parser.parse_args()
 
