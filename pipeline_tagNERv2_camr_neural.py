@@ -44,7 +44,7 @@ def main():
 
     print('Running NER...')
     check_call(['bash', 'tag_NER.sh',
-          '-i', path.join('../..', args.input_text), # because cwd gets one level below
+          '-i', path.join('../..', tokenized_input), # because cwd gets two levels below
           '-f', 'IOB'], cwd='submodules/tag_NER_v2')
     print('Done\n')
     # the output is entities_output
