@@ -46,19 +46,21 @@ def main():
     for sentence in data:
         amr = sentence['amr']
         id = sentence['id']
+        index = 0
         for info in sentence['extracted_information']:
             if not info['participant_a']:
-                extractor_input.append([id, amr,
+                extractor_input.append([id + '_' + str(index), amr,
                                         [info['interaction_type'],
                                          info['participant_b']]])
             elif not info['participant_b']:
-                extractor_input.append([id, amr,
+                extractor_input.append([id + '_' + str(index), amr,
                                         [info['interaction_type'],
                                          info['participant_a']]])
             else:
-                extractor_input.append([id, amr,
+                extractor_input.append([id + '_' + str(index), amr,
                                         [info['participant_a'],
                                          info['participant_b']]])
+            index += 1
 
     paths_in_fname = os.path.join(args.tmp_dir, 'paths_in.json')
     paths_out_fname = os.path.join(args.tmp_dir, 'paths_out.json')
@@ -66,7 +68,7 @@ def main():
     with io.open(paths_in_fname, 'w', encoding='utf-8') as f:
         json.dump(extractor_input, f)
 
-    check_call(['python', 'extract_amr_paths.py',
+    check_call(['python3', 'extract_amr_paths.py',
                 '-i', paths_in_fname,
                 '-o', paths_out_fname])
 
@@ -75,9 +77,10 @@ def main():
 
     for i in range(len(data)):
         id = data[i]['id']
-        path = paths_by_id(id)[0]  # Just taking the first found path
-        sent = sentence_from_path(path)
-        data[i]['amr_path'] = sent
+        for index in range(len(data[i]['extracted_information'])):
+            path = paths_by_id(extracted_info, id + '_' + str(index))[0]  # Just taking the first found path
+            sent = sentence_from_path(path)
+            data[i]['extracted_information'][index]['amr_path'] = sent
 
     with io.open(args.output_json, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=True)
