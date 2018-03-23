@@ -18,7 +18,7 @@ def main():
     parser.add_argument('--clean_entities', action='store_true')
     args = parser.parse_args()
     
-    protein_labels = ['proteingene', 'smallmolecule']
+    protein_labels = ['proteingene', 'smallmolecule']  #, 'cellularcomponent', 'celltypeline']
     
     print("Read {input_iob2:} IOB2 file and extract entities marked as '{entities:}', store the results to {output_json:}, use sentences from {input_text:}".format(
         input_iob2=args.input_iob2,
