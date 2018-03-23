@@ -44,30 +44,32 @@ def main():
 
     print('Running NER...')
     check_call(['bash', 'tag_NER.sh',
-          '-i', path.join('../..', tokenized_input), # because cwd gets two levels below
-          '-f', 'IOB'], cwd='submodules/tag_NER_v2')
+                '-i', path.join('../..', tokenized_input), # because cwd gets two levels below
+                '-f', 'IOB'], cwd='submodules/tag_NER_v2')
     print('Done\n')
     # the output is entities_output
     
     
     print('Building interaction tuples with unknown labels...')
     check_call(['python', 'iob_to_bind_json.py',
-          '--input_text', args.input_text,
-          '--input_iob2', entities_output,
-          '--output_json', args.output_json]) #candidate_tuples_json])
+                '--input_text', args.input_text,
+                '--input_iob2', entities_output,
+                '--output_json', args.output_json]) #candidate_tuples_json])
     print('Done\n')
     
     print('Adding AMRs')
-    check_call(['python', 'add_amr.py',
-          '--input_json', args.output_json,
-          '--model', 'amr2_bio7_best_after_2_fscore_0.6118.m',
-          '--output_json', args.output_json])
+    check_call(['python3', 'add_amr.py',
+                '--input_text', args.input_text,
+                '--input_json', args.output_json,
+                '--model', 'amr2_bio7_best_after_2_fscore_0.6118.m',
+                '--output_json', args.output_json,
+                '--tmp_dir', args.tmp_dir])
     print('Done\n')
     
     print('Extracting AMR paths')
     check_call(['python', 'extract_amr_paths.py',
-          '--input_json', args.output_json,
-          '--output_json', args.output_json])
+                '--input_json', args.output_json,
+                '--output_json', args.output_json])
     print('Done\n')
     
     
@@ -78,10 +80,10 @@ def main():
 
     print('Detecting true interactions...')
     check_call(['python',
-          'submodules/RelationClassification/inference.py',
-          '--input_json', candidate_tuples_json,
-          '--output_json', args.output_json,
-          '--model_path', args.classifier_model
+                'submodules/RelationClassification/inference.py',
+                '--input_json', candidate_tuples_json,
+                '--output_json', args.output_json,
+                '--model_path', args.classifier_model
           ])
     print('Done\n')
 
