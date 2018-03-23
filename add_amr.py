@@ -1,3 +1,6 @@
+from __future__ import print_function
+from __future__ import division
+
 import io
 import argparse
 import json
@@ -19,12 +22,15 @@ def main():
     parser.add_argument('--output_json', '-o', required=True, type=str)
     args = parser.parse_args()
 
-    parsed_amr_path = os.path.join(args.tmp_dir, ['amrs'])
+    input_text_abs_path = os.path.abspath(args.input_text)
+    parsed_amr_path = os.path.join(args.tmp_dir, 'amrs')
+    parsed_amr_path = os.path.abspath(parsed_amr_path)
     check_call(['docker', 'run', '-it', '--rm',
-                '-v', args.input_text + ':/tmp/in/input.txt:ro',
+                '-v', input_text_abs_path + ':/tmp/in/input.txt:ro',
                 '-v', parsed_amr_path + ':/tmp/out:rw',
                 'yerevann/camr', args.model])
 
+    parsed_amr_path = os.path.join(parsed_amr_path, 'output.txt')
     with io.open(parsed_amr_path, 'r', encoding='utf-8') as f:
         amrs = f.read().split('\n\n')[:-1]  # Removing last empty sentence
 
@@ -33,8 +39,9 @@ def main():
     with io.open(args.input_json, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    for key in data:
-        data[key]['amr'] = amr_dict[key]
+    for i in range(len(data)):
+        id = data[i]['id']
+        data[i]['amr'] = amr_dict[id]
 
     with io.open(args.output_json, 'w', encoding='utf-8') as f:
         json.dump(data, f, indent=True)
