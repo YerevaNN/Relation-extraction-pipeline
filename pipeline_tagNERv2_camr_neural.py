@@ -67,9 +67,10 @@ def main():
     print('Done\n')
     
     print('Extracting AMR paths')
-    check_call(['python', 'extract_amr_paths.py',
+    check_call(['python', 'append_amr_paths.py',
                 '--input_json', args.output_json,
-                '--output_json', args.output_json])
+                '--output_json', args.output_json,
+                '--tmp_dir', args.tmp_dir])
     print('Done\n')
     
     
