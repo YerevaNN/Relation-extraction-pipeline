@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--output_json', '-o', required=True, type=str)
     parser.add_argument('--tmp_dir', '-t', default='results/tmp', type=str)
     parser.add_argument('--classifier_model', '-c', default='', type=str)
+    parser.add_argument('--use_sdg', action='store_true')
     args = parser.parse_args()
 
     basename = path.basename(args.input_text)
@@ -71,6 +72,22 @@ def main():
                 '--input_json', args.output_json,
                 '--output_json', args.output_json])
     print('Done\n')
+    
+    if args.use_sdg:        
+        print('Adding Stanford Dependency Graphs')
+        check_call(['python3', 'add_sdg.py',
+                    '--input_text', args.input_text,
+                    '--input_json', args.output_json,
+                    '--output_json', args.output_json,
+                    '--tmp_dir', args.tmp_dir])
+        print('Done\n')
+
+        print('Extracting SDG paths')
+        raise Exception("SDG path extractor is not implemented")
+        check_call(['python', 'extract_amr_paths.py',
+                    '--input_json', args.output_json,
+                    '--output_json', args.output_json])
+        print('Done\n')
     
     
 
