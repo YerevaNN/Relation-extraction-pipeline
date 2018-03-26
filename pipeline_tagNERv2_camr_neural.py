@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--output_json', '-o', required=True, type=str)
     parser.add_argument('--tmp_dir', '-t', default='results/tmp', type=str)
     parser.add_argument('--classifier_model', '-c', default='', type=str)
+    parser.add_argument('--use_amr', action='store_true')
     parser.add_argument('--use_sdg', action='store_true')
     args = parser.parse_args()
 
@@ -50,7 +51,6 @@ def main():
     print('Done\n')
     # the output is entities_output
     
-    
     print('Building interaction tuples with unknown labels...')
     check_call(['python', 'iob_to_bind_json.py',
                 '--input_text', args.input_text,
@@ -58,25 +58,26 @@ def main():
                 '--output_json', args.output_json]) #candidate_tuples_json])
     print('Done\n')
     
-    print('Adding AMRs')
-    check_call(['python3', 'add_amr.py',
-                '--input_text', args.input_text,
-                '--input_json', args.output_json,
-                '--model', 'amr2_bio7_best_after_2_fscore_0.6118.m',
-                '--output_json', args.output_json,
-                '--tmp_dir', args.tmp_dir])
-    print('Done\n')
-    
-    print('Extracting AMR paths')
-    check_call(['python3', 'append_amr_paths.py',
-                '--input_json', args.output_json,
-                '--output_json', args.output_json,
-                '--tmp_dir', args.tmp_dir])
-    print('Done\n')
-    
+    if args.use_amr:
+        print('Adding AMRs')
+        check_call(['python3', 'add_amr.py',
+                    '--input_text', args.input_text,
+                    '--input_json', args.output_json,
+                    '--model', 'amr2_bio7_best_after_2_fscore_0.6118.m',
+                    '--output_json', args.output_json,
+                    '--tmp_dir', args.tmp_dir])
+        print('Done\n')
+        
+        print('Extracting AMR paths')
+        check_call(['python3', 'append_amr_paths.py',
+                    '--input_json', args.output_json,
+                    '--output_json', args.output_json,
+                    '--tmp_dir', args.tmp_dir])
+        print('Done\n')
+
     if args.use_sdg:        
         print('Adding Stanford Dependency Graphs')
-        check_call(['python3', 'add_sdg.py',
+        check_call(['python', 'add_sdg1.py',
                     '--input_text', args.input_text,
                     '--input_json', args.output_json,
                     '--output_json', args.output_json,
@@ -84,8 +85,7 @@ def main():
         print('Done\n')
 
         print('Extracting SDG paths')
-        raise Exception("SDG path extractor is not implemented")
-        check_call(['python', 'extract_amr_paths.py',
+        check_call(['python', 'append_sdg_paths.py',
                     '--input_json', args.output_json,
                     '--output_json', args.output_json])
         print('Done\n')
