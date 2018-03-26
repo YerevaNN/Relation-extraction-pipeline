@@ -90,10 +90,7 @@ def main():
                     '--output_json', args.output_json])
         print('Done\n')
     
-    
 
-    # add command to generate SDG .. paths
-    
     raise Exception("Classifier is not ready!")
 
     print('Detecting true interactions...')
