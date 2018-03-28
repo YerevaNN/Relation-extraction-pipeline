@@ -27,7 +27,7 @@ def main():
     parser.add_argument('--use_amr', '-uamr', action='store_true')
     parser.add_argument('--use_sdg', '-usdg', action='store_true')
     parser.add_argument('--use_ground_truth_entities', '-ug', action='store_true')
-    parser.add_argument('--ground_truth_json', '-g', required=True, type=str)
+    parser.add_argument('--ground_truth_json', '-g', type=str)
     args = parser.parse_args()
 
     basename = os.path.basename(args.input_text)
@@ -95,7 +95,7 @@ def main():
 
     if args.use_sdg:        
         print('Adding Stanford Dependency Graphs...')
-        check_call(['python', 'add_sdg1.py',
+        check_call(['python', 'add_sdg.py',
                     '--input_text', args.input_text,
                     '--input_json', args.output_json,
                     '--output_json', args.output_json,
