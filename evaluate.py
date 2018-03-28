@@ -9,10 +9,12 @@ import re
 from sentence_filters import multiword, tags
 
 def normalize(text):
-    text = text.lower()
-    tokens = re.split('([-.,;\(\)\s\?\!\/\*])', text)
-    tokens = [s for s in tokens if s.strip() not in ['', ',', '.', '(', ')', '*', '/', '?', '!']]
-    return ' '.join(tokens)
+    if text:
+        text = text.lower()
+        tokens = re.split('([-.,;\(\)\s\?\!\/\*])', text)
+        tokens = [s for s in tokens if s.strip() not in ['', ',', '.', '(', ')', '*', '/', '?', '!']]
+        return ' '.join(tokens)
+    return text
 
 def normalize_set(interaction_tuple):
     interaction_tuple = [normalize(t) for t in interaction_tuple]
