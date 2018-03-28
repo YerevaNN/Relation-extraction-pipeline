@@ -158,7 +158,9 @@ def main():
             for sentence in dense:
                 for pair in sentence['extracted_information']:
                     pair['label'] = flat[pair['id']]['prediction']
-            fw.write(dense)  
+                    
+            dense_json_string = json.dumps(dense, indent=True)
+            fw.write(unicode(dense_json_string))
     print("Done!")
 
     # replace protein names with identifiers
