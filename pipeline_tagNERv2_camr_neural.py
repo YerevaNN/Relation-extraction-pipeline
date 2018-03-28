@@ -59,7 +59,7 @@ def main():
                     id, sentence = line[:-1].split('\t')  # \n symbol
                     #sentence = sentence.replace('-',' - ')
                     sentence = ' '.join(sentence.split())
-                    fw.write("{}\t{}\n".format(id, sentence))
+                    fw.write(unicode("{}\t{}\n".format(id, sentence)))
 
         print('Running NER...')
         check_call(['bash', 'tag_NER.sh',
