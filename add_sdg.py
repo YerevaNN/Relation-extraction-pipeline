@@ -40,10 +40,15 @@ def main():
 
     for i in range(len(data)):
         id = data[i]['id']
+        if id not in sdg_dict:
+            print("Sentence with ID='{}' has no SDG graph".format(id))
+            continue
+        
         data[i]['sdg'] = sdg_dict[id]
 
     with io.open(args.output_json, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=True)
+        dumps = json.dumps(data, indent=True)
+        f.write(unicode(dumps))
 
 if __name__ == '__main__':
     main()
