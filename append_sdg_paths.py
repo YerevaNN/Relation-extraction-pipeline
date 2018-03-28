@@ -5,6 +5,7 @@ import io
 import argparse
 import json
 import os
+from nltk.tokenize import wordpunct_tokenize
 from subprocess import check_call
 
 
@@ -14,9 +15,23 @@ def sentence_from_path(path):
 
 
 def word_id(sdg, word):
+    if ' ' in word:
+        # choose the first word
+        word = word.split(' ')[0]
+        
     for line in sdg.split('\n'):
         if word == line.split()[1]:
             return int(line.split()[0])
+    
+    # word was not found
+    # attempt to tokenize
+    word = wordpunct_tokenize(word)[0]
+    
+    for line in sdg.split('\n'):
+        if word == line.split()[1]:
+            return int(line.split()[0])
+    
+    print("Word {} does not exist in {}".format(word, sdg))
     return None
 
 
@@ -41,6 +56,8 @@ def sdg_line_by_id(sdg, id):
     for line in sdg.split('\n'):
         if int(line.split()[0]) == id:
             return line
+    
+    print("ID {} does not exist in {}".format(id, sdg))
     return None
 
 
@@ -51,14 +68,23 @@ def sdg_paths(sdg, word_1, word_2):
     path_2 = []
     sdg = sdg
     
+    if id_1 is None or id_2 is None:
+        return [], []
+    
     id = id_1
     while id != 0:
-        _, word, pos, id, edge = parse_sdg_line(sdg_line_by_id(sdg, id))
+        line = sdg_line_by_id(sdg, id)
+        if line is None:
+            return [], []
+        _, word, pos, id, edge = parse_sdg_line(line)
         path_1.append((word, pos, edge))
 
     id = id_2
     while id != 0:
-        _, word, pos, id, edge = parse_sdg_line(sdg_line_by_id(sdg, id))
+        line = sdg_line_by_id(sdg, id)
+        if line is None:
+            return [], []
+        _, word, pos, id, edge = parse_sdg_line(line)
         path_2.append((word, pos, edge))
         index = word_in_path(path_1, word)
         if index:
@@ -94,6 +120,10 @@ def main():
 
     for i in range(len(data)):
         sdg = data[i]['sdg']
+        if sdg.strip() == '':
+            data[i]['extracted_information'][j]['sdg_path'] = ''
+            continue
+            
         for j in range(len(data[i]['extracted_information'])):
             info = data[i]['extracted_information'][j]
             if not info['participant_a']:
@@ -110,7 +140,8 @@ def main():
             data[i]['extracted_information'][j]['sdg_path'] = sentence
 
     with io.open(args.output_json, 'w', encoding='utf-8') as f:
-        json.dump(data, f, indent=True)
+        data_string = json.dumps(data, indent=True)
+        f.write(unicode(data_string))
 
 if __name__ == '__main__':
     main()
