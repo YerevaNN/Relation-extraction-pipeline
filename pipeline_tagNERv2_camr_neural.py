@@ -59,7 +59,7 @@ def main():
                     id, sentence = line[:-1].split('\t')  # \n symbol
                     #sentence = sentence.replace('-',' - ')
                     sentence = ' '.join(sentence.split())
-                    fw.write(unicode("{}\t{}\n".format(id, sentence)))
+                    fw.write("{}\t{}\n".format(id, sentence))
 
         print('Running NER...')
         check_call(['bash', 'tag_NER.sh',
@@ -139,7 +139,7 @@ def main():
                         flat[id]['sdg_path'] = pair['sdg_path']
             
             flat_json_string = json.dumps(flat, indent=True)
-            fw.write(unicode(flat_json_string))
+            fw.write(flat_json_string)
     print("Done!")
 
     print('Detecting true interactions...')
@@ -160,7 +160,7 @@ def main():
                     pair['label'] = flat[pair['id']]['prediction']
                     
             dense_json_string = json.dumps(dense, indent=True)
-            fw.write(unicode(dense_json_string))
+            fw.write(dense_json_string)
     print("Done!")
 
     # replace protein names with identifiers

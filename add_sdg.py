@@ -48,7 +48,7 @@ def main():
 
     with io.open(args.output_json, 'w', encoding='utf-8') as f:
         dumps = json.dumps(data, indent=True)
-        f.write(unicode(dumps))
+        f.write(dumps)
 
 if __name__ == '__main__':
     main()
