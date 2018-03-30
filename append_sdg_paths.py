@@ -4,10 +4,8 @@ from __future__ import division
 import io
 import argparse
 import json
-import os
+from tqdm import tqdm
 from nltk.tokenize import wordpunct_tokenize
-from subprocess import check_call
-
 
 def sentence_from_path(path):
     sentence = ''
@@ -119,7 +117,7 @@ def main():
     with io.open(args.input_json, 'r', encoding='utf-8') as f:
         data = json.load(f)
 
-    for i in range(len(data)):
+    for i in tqdm(range(len(data))):
         sdg = data[i]['sdg']
         if sdg.strip() == '':
             data[i]['extracted_information'][j]['sdg_path'] = ''
