@@ -31,7 +31,7 @@ def word_id(sdg, word):
         if word == line.split()[1]:
             return int(line.split()[0])
     
-    print("Word {} does not exist in {}".format(word, sdg))
+    print("Word {} does not exist in {}".format(word, "")) #sdg))
     return None
 
 
@@ -39,10 +39,11 @@ def parse_sdg_line(sdg_line):
     line_arr = sdg_line.split()
     id = int(line_arr[0])
     word = line_arr[1]
-    pos = line_arr[2]
-    parent_id = int(line_arr[3])
-    edge = line_arr[4]
-    return id, word, pos, parent_id, edge
+    lemma = line_arr[2]
+    pos = line_arr[3]
+    parent_id = int(line_arr[4])
+    edge = line_arr[5]
+    return id, word, lemma, pos, parent_id, edge
 
 
 def word_in_path(path, word):
@@ -57,7 +58,7 @@ def sdg_line_by_id(sdg, id):
         if int(line.split()[0]) == id:
             return line
     
-    print("ID {} does not exist in {}".format(id, sdg))
+    print("ID {} does not exist in \n {}".format(id, "")) #sdg))
     return None
 
 
@@ -76,7 +77,7 @@ def sdg_paths(sdg, word_1, word_2):
         line = sdg_line_by_id(sdg, id)
         if line is None:
             return [], []
-        _, word, pos, id, edge = parse_sdg_line(line)
+        _, word, _, pos, id, edge = parse_sdg_line(line)
         path_1.append((word, pos, edge))
 
     id = id_2
@@ -84,7 +85,7 @@ def sdg_paths(sdg, word_1, word_2):
         line = sdg_line_by_id(sdg, id)
         if line is None:
             return [], []
-        _, word, pos, id, edge = parse_sdg_line(line)
+        _, word, _, pos, id, edge = parse_sdg_line(line)
         path_2.append((word, pos, edge))
         index = word_in_path(path_1, word)
         if index:
@@ -141,7 +142,7 @@ def main():
 
     with io.open(args.output_json, 'w', encoding='utf-8') as f:
         data_string = json.dumps(data, indent=True)
-        f.write(unicode(data_string))
+        f.write(data_string)
 
 if __name__ == '__main__':
     main()

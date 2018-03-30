@@ -26,6 +26,7 @@ def main():
     parser.add_argument('--classifier_model', '-c', default='', type=str)
     parser.add_argument('--use_amr', '-uamr', action='store_true')
     parser.add_argument('--use_sdg', '-usdg', action='store_true')
+    parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str)
     parser.add_argument('--use_ground_truth_entities', '-ug', action='store_true')
     parser.add_argument('--ground_truth_json', '-g', type=str)
     args = parser.parse_args()
@@ -99,6 +100,7 @@ def main():
                     '--input_text', args.input_text,
                     '--input_json', args.output_json,
                     '--output_json', args.output_json,
+                    '--model', args.sdg_model,
                     '--tmp_dir', args.tmp_dir])
         print('Done\n')
 

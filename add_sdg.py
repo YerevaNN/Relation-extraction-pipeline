@@ -21,12 +21,19 @@ def main():
     parser.add_argument('--input_json', '-ij', required=True, type=str)
     parser.add_argument('--tmp_dir', '-t', required=True, type=str)
     parser.add_argument('--output_json', '-o', required=True, type=str)
+    parser.add_argument('--model', '-m', default='stanford', type=str)
     args = parser.parse_args()
-
+    
     sdg_output = os.path.join(args.tmp_dir, 'output.conll')
-    check_call(['bash', 'submodules/conll_parser/parse_script.sh',
-                args.input_text, sdg_output])
-
+        
+    if args.model == 'stanford':
+        check_call(['bash', 'submodules/conll_parser/parse_script.sh',
+                    args.input_text, sdg_output])
+    elif args.model == 'spacy':
+        check_call(['python3', 'submodules/spacy_wrapper/conll/parser.py',
+                    '--input', args.input_text, 
+                    '--output', sdg_output])
+        
     with io.open(sdg_output, 'r', encoding='utf-8') as f:
         sdgs = f.read().split('\n\n')
        
