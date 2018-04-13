@@ -20,14 +20,14 @@ def sentence_from_path(path):
     sentence = ''
 
     if path[0]:
-        sentence = path[0][0][0]
+        sentence = '{}'.format(path[0][0][0])
         for i in path[0][1:]:
-            sentence += ' ' + i[1] + ' ' + i[0]
+            sentence += ' {} {}'.format(i[0], i[1])
 
     if path[1]:
         for i in path[1][:1:-1]:
-            sentence += ' ' + i[0] + ' ' + i[1]
-        sentence += ' ' + path[1][0][0]
+            sentence += ' {} {}'.format(i[0], i[1])
+        sentence += ' {}'.format(path[1][0][0])
 
     return sentence
 

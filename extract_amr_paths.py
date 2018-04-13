@@ -14,16 +14,21 @@ def nodes_from_word(graph, word):
             nodes.append(attr.source)
     return list(set(nodes))
 
+def remove_quotes(word):
+    if isinstance(word, str) and word[0] == '"' and word[-1] == '"':
+        return word[1:-1]
+    return word
+
 def word_from_node(graph, node):
     for attr in graph.attributes():
         if attr.target == 'name':
             continue
         if attr.source == node:
-            return attr.target
+            return remove_quotes(attr.target)
 
     for attr in graph.attributes():
         if attr.source == node:
-            return attr.target
+            return remove_quotes(attr.target)
     return None
 
 def reconstruct_path(back_edges, node_1, node_2):
