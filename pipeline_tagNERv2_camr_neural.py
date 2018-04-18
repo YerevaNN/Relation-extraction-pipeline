@@ -24,6 +24,7 @@ def main():
     parser.add_argument('--output_json', '-o', required=True, type=str)
     parser.add_argument('--tmp_dir', '-t', default='results/tmp', type=str)
     parser.add_argument('--classifier_model', '-c', default='', type=str)
+    parser.add_argument('--classifier_preprocessor', '-cp', default='', type=str)
     parser.add_argument('--use_amr', '-uamr', action='store_true')
     parser.add_argument('--use_sdg', '-usdg', action='store_true')
     parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str)
@@ -83,6 +84,7 @@ def main():
                     '--input_text', args.input_text,
                     '--input_json', args.output_json,
                     '--model', 'amr2_bio7_best_after_2_fscore_0.6118.m',
+                    #'--model', 'bio_model_best.m',
                     '--output_json', args.output_json,
                     '--tmp_dir', args.tmp_dir])
         print('Done\n')
@@ -145,10 +147,11 @@ def main():
     print("Done!")
 
     print('Detecting true interactions...')
-    check_call(['python',
+    check_call(['python3',
                 'predict.py',
                 '--input_path', before_classifier,
                 '--output_path', after_classifier,
+                '--processor_path', args.classifier_preprocessor,
                 '--model_path', args.classifier_model
           ], cwd='submodules/RelationClassification/')
     print('Done\n')
@@ -157,10 +160,17 @@ def main():
     with io.open(after_classifier, encoding='utf-8') as fr:
         with io.open(args.output_json, 'w', encoding='utf-8') as fw:
             flat = json.load(fr)
+            found = 0
+            missing = 0
             for sentence in dense:
                 for pair in sentence['extracted_information']:
-                    pair['label'] = flat[pair['id']]['prediction']
-                    
+                    if pair['id'] in flat:
+                        pair['label'] = flat[pair['id']]['prediction']
+                        found += 1
+                    else:
+                        missing += 1
+            print("{}/{} items did not have predictions".format(missing, missing+found))
+            
             dense_json_string = json.dumps(dense, indent=True)
             fw.write(dense_json_string)
     print("Done!")
