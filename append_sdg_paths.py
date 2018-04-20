@@ -7,10 +7,6 @@ import json
 from tqdm import tqdm
 from nltk.tokenize import wordpunct_tokenize
 
-def sentence_from_path(path):
-    sentence = ''
-    return sentence
-
 
 def word_id(sdg, word):
     if ' ' in word:
