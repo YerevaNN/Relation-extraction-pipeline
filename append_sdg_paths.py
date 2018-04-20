@@ -5,28 +5,22 @@ import io
 import argparse
 import json
 from tqdm import tqdm
-from nltk.tokenize import wordpunct_tokenize
-
+# from nltk.tokenize import wordpunct_tokenize
+from nltk.metrics.distance import edit_distance
 
 def word_id(sdg, word):
     if ' ' in word:
         # choose the first word
         word = word.split(' ')[0]
-        
+    sdg_words = []
     for line in sdg.split('\n'):
-        if word == line.split()[1]:
-            return int(line.split()[0])
-    
-    # word was not found
-    # attempt to tokenize
-    word = wordpunct_tokenize(word)[0]
-    
-    for line in sdg.split('\n'):
-        if word == line.split()[1]:
-            return int(line.split()[0])
-    
-    print("Word {} does not exist in {}".format(word, "")) #sdg))
-    return None
+        id, sdg_word, _ , _ , _ , _ = parse_sdg_line(line)
+        sdg_words.append((id, sdg_word))
+    sdg_words = sorted(sdg_words, key=lambda x: edit_distance(x[1], word))
+    # with open('tmplog', 'a', encoding='utf-8') as f:
+    #     f.write(u'{} {} {}\n'.format(edit_distance(sdg_words[0][1], word), word, sdg_words[0][1]))
+    return sdg_words[0][0]
+
 
 
 def parse_sdg_line(sdg_line):
@@ -43,7 +37,7 @@ def parse_sdg_line(sdg_line):
 def word_in_path(path, word):
     for (i, (w, p, e)) in enumerate(path):
         if w == word:
-            return i
+            return i + 1
     return None
 
 
@@ -52,7 +46,7 @@ def sdg_line_by_id(sdg, id):
         if int(line.split()[0]) == id:
             return line
     
-    print("ID {} does not exist in \n {}".format(id, "")) #sdg))
+    print("ID {} does not exist in \n {}".format(id, sdg))
     return None
 
 
@@ -73,7 +67,6 @@ def sdg_paths(sdg, word_1, word_2):
             return [], []
         _, word, _, pos, id, edge = parse_sdg_line(line)
         path_1.append((word, pos, edge))
-
     id = id_2
     while id != 0:
         line = sdg_line_by_id(sdg, id)
@@ -83,8 +76,7 @@ def sdg_paths(sdg, word_1, word_2):
         path_2.append((word, pos, edge))
         index = word_in_path(path_1, word)
         if index:
-            return path_1[ :index + 1], path_2
-
+            return path_1[ :index], path_2
     return [], []
 
 
@@ -116,6 +108,7 @@ def main():
     for i in tqdm(range(len(data))):
         sdg = data[i]['sdg']
         if sdg.strip() == '':
+            print("AAAA!")
             data[i]['extracted_information'][j]['sdg_path'] = ''
             continue
             
