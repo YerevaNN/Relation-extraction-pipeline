@@ -141,6 +141,11 @@ def main():
                         flat[id]['amr_path'] = pair['amr_path']
                     if 'sdg_path' in pair: 
                         flat[id]['sdg_path'] = pair['sdg_path']
+                    if 'tokenized_text' in pair: 
+                        flat[id]['tokenized_text'] = sentence['tokenized_text']
+                    if 'pos_tags' in pair:
+                        flat[id]['pos_tags'] = sentence['pos_tags']
+                        
             
             flat_json_string = json.dumps(flat, indent=True)
             fw.write(flat_json_string)

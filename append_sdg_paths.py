@@ -30,7 +30,7 @@ def word_id(sdg, word):
 
 
 def parse_sdg_line(sdg_line):
-    line_arr = sdg_line.split()
+    line_arr = sdg_line.split('\t')
     id = int(line_arr[0])
     word = line_arr[1]
     lemma = line_arr[2]
