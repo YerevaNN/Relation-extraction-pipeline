@@ -159,7 +159,7 @@ def main():
                     '--output_path', after_classifier,
                     '--processor_path', args.classifier_preprocessor,
                     '--model_path', args.classifier_model
-              ], cwd='submodules/RelationClassification/', env=env)
+              ], cwd='submodules/RelationClassification/')
         print('Done\n')
     else:
         print("`before-classifier.json` already exists. Will look for after-classifier JSON directly.")
