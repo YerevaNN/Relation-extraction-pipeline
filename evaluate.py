@@ -95,6 +95,7 @@ def main():
     
     parser.add_argument('--multiword', default=0, type=int, help='values: +1 or -1')
     parser.add_argument('--tags', default='', type=str, help='example: complex+1,abbr-1')
+    parser.add_argument('--has_sdg', default=0, type=int, help='+1 or -1')
     
     args = parser.parse_args()
     
@@ -130,7 +131,17 @@ def main():
     if args.tags:
         truth = [t for t in truth if tags(t, args.tags)]
         prediction = [p for p in prediction if tags(p, args.tags)]
-        
+       
+    if args.has_sdg != 0:
+        if args.has_sdg == 1:
+            has_sdg_filter = lambda x: x['sdg_path'] != ''
+        if args.has_sdg == -1:
+            has_sdg_filter = lambda x: x['sdg_path'] == ''
+            
+        for t in truth:
+            t['extracted_information'] = [x for x in t['extracted_information'] if has_sdg_filter(x)]
+        for p in prediction:
+            p['extracted_information'] = [x for x in p['extracted_information'] if has_sdg_filter(x)]
 
     if not args.sentence_level:
         truth_tuples = get_all_tuples(truth, positive_labels, only=args.only)
