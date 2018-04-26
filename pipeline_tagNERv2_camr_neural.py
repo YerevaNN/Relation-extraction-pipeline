@@ -120,14 +120,13 @@ def main():
     
     print("Converting dense JSON to flat JSON: {} ...".format(before_classifier))      
     with io.open(args.output_json, encoding='utf-8') as fr:
-        with io.open(before_classifier, 'w', encoding='utf-8') as fw:
-            dense = json.load(fr)
-            flat = {}
-            for sentence in dense:
-                for i, pair in enumerate(sentence['extracted_information']):
-                    id = "{}|{}".format(sentence['id'], i)
-                    sentence['extracted_information'][i]['id'] = id
-                    flat[id] = {
+        dense = json.load(fr)
+        flat = {}
+        for sentence in dense:
+            for i, pair in enumerate(sentence['extracted_information']):
+                id = "{}|{}".format(sentence['id'], i)
+                sentence['extracted_information'][i]['id'] = id
+                flat[id] = {
                         'text': sentence['text'],
                         'interaction_tuple': [
                             pair['interaction_type'],
@@ -137,30 +136,34 @@ def main():
                         ],
                         'label': 1 if pair['label'] != 0 else 0  # TODO: -1s
                     }
-                    if 'amr_path' in pair: 
-                        flat[id]['amr_path'] = pair['amr_path']
-                    if 'sdg_path' in pair: 
-                        flat[id]['sdg_path'] = pair['sdg_path']
-                    if 'tokenized_text' in pair: 
-                        flat[id]['tokenized_text'] = sentence['tokenized_text']
-                    if 'pos_tags' in pair:
-                        flat[id]['pos_tags'] = sentence['pos_tags']
-                        
-            
-            flat_json_string = json.dumps(flat, indent=True)
+                if 'amr_path' in pair: 
+                    flat[id]['amr_path'] = pair['amr_path']
+                if 'sdg_path' in pair: 
+                    flat[id]['sdg_path'] = pair['sdg_path']
+                if 'tokenized_text' in sentence: 
+                    flat[id]['tokenized_text'] = sentence['tokenized_text']
+                if 'pos_tags' in sentence:
+                    flat[id]['pos_tags'] = sentence['pos_tags']
+
+
+    flat_json_string = json.dumps(flat, indent=True)
+    if not os.path.exists(before_classifier):        
+        with io.open(before_classifier, 'w', encoding='utf-8') as fw:
             fw.write(flat_json_string)
-    print("Done!")
+        print("Done!")
 
-    print('Detecting true interactions...')
-    check_call(['python3',
-                'predict.py',
-                '--input_path', before_classifier,
-                '--output_path', after_classifier,
-                '--processor_path', args.classifier_preprocessor,
-                '--model_path', args.classifier_model
-          ], cwd='submodules/RelationClassification/')
-    print('Done\n')
-
+        print('Detecting true interactions...')
+        check_call(['python',
+                    'predict.py',
+                    '--input_path', before_classifier,
+                    '--output_path', after_classifier,
+                    '--processor_path', args.classifier_preprocessor,
+                    '--model_path', args.classifier_model
+              ], cwd='submodules/RelationClassification/', env=env)
+        print('Done\n')
+    else:
+        print("`before-classifier.json` already exists. Will look for after-classifier JSON directly.")
+        
     print("Reading classifier output from flat JSON: {} ...".format(after_classifier))      
     with io.open(after_classifier, encoding='utf-8') as fr:
         with io.open(args.output_json, 'w', encoding='utf-8') as fw:
