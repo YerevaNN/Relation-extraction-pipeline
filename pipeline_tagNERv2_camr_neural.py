@@ -9,7 +9,7 @@ import argparse
 import json
 
 import os
-from subprocess import check_call
+from subprocess import check_call, check_output
 
 
 def ensure_dir(dir):
@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--input_text', '-i', required=True, type=str)
     parser.add_argument('--output_json', '-o', required=True, type=str)
     parser.add_argument('--tmp_dir', '-t', default='results/tmp', type=str)
+    parser.add_argument('--classifier_type', '-ct', default='RelationClassification', type=str)
     parser.add_argument('--classifier_model', '-c', default='', type=str)
     parser.add_argument('--classifier_preprocessor', '-cp', default='', type=str)
     parser.add_argument('--use_amr', '-uamr', action='store_true')
@@ -161,17 +162,44 @@ def main():
             fw.write(flat_json_string)
         print("Done!")
 
-        print('Detecting true interactions...')
-        check_call(['python',
-                    'predict.py',
-                    '--input_path', before_classifier,
-                    '--output_path', after_classifier,
-                    '--processor_path', args.classifier_preprocessor,
-                    '--model_path', args.classifier_model
-              ], cwd='submodules/RelationClassification/')
-        print('Done\n')
-    else:
-        print("`before-classifier.json` already exists. Will look for after-classifier JSON directly.")
+        print('Detecting true interactions using {} ...'.format(args.classifier_type))
+        if args.classifier_type == "RelationClassification":
+            check_call(['python',
+                        'predict.py',
+                        '--input_path', before_classifier,
+                        '--output_path', after_classifier,
+                        '--processor_path', args.classifier_preprocessor,
+                        '--model_path', args.classifier_model
+                  ], cwd='submodules/RelationClassification/')
+        elif args.classifier_type == "fasttext":
+            # TODO: this is pretty ugly. 
+            # Preprocessing and postprocessing for fasttext and RelClass should be at the same level
+            before_fasttext = os.path.join(args.tmp_dir, '{}.before-fasttext.txt'.format(basename))
+            fasttext_keys = []
+            
+            with io.open(before_fasttext, 'w', encoding='utf-8') as fw:
+                for k,v in flat.items():
+                    fw.write("{}\n".format(v['text']))
+                    fasttext_keys.append(k)
+                    
+            fasttext_output = check_output(['fasttext',
+                'predict',
+                args.classifier_model,
+                before_fasttext,
+                #after_classifier
+               ])
+            fasttext_labels = fasttext_output.decode('utf-8').split('\n')
+            
+            for i, k in enumerate(fasttext_keys):
+                label_string = fasttext_labels[i]
+                if not label_string.startswith("__label__"):
+                    print("Error: invalid label: {}".format(label_string))
+                else:
+                    flat[k]['prediction'] = int(label_string[9:])
+                    
+            flat_json_string = json.dumps(flat, indent=True)
+            with io.open(after_classifier, 'w', encoding='utf-8') as fw:
+                fw.write(flat_json_string)
         
     print("Reading classifier output from flat JSON: {} ...".format(after_classifier))      
     with io.open(after_classifier, encoding='utf-8') as fr:
