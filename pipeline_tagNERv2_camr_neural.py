@@ -124,6 +124,8 @@ def main():
     with io.open(args.output_json, encoding='utf-8') as fr:
         dense = json.load(fr)
         flat = {}
+        if args.anonymize:
+            print("Anonymizing...")
         for sentence in dense:
             for i, pair in enumerate(sentence['extracted_information']):
                 id = "{}|{}".format(sentence['id'], i)
