@@ -30,6 +30,7 @@ def main():
     parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str)
     parser.add_argument('--use_ground_truth_entities', '-ug', action='store_true')
     parser.add_argument('--ground_truth_json', '-g', type=str)
+    parser.add_argument('--anonymize', '-a', action='store_true')
     args = parser.parse_args()
 
     basename = os.path.basename(args.input_text)
@@ -144,6 +145,14 @@ def main():
                     flat[id]['tokenized_text'] = sentence['tokenized_text']
                 if 'pos_tags' in sentence:
                     flat[id]['pos_tags'] = sentence['pos_tags']
+                    
+                if args.anonymize:
+                    text = flat[id]['text']
+                    participant_a = pair['participant_a'].strip()
+                    participant_b = pair['participant_b'].strip()
+                    text = text.replace(participant_a, ' placeholder first placeholder ')
+                    text = text.replace(participant_b, ' placeholder second placeholder ')
+                    flat[id]['text'] = text
 
 
     flat_json_string = json.dumps(flat, indent=True)
