@@ -140,22 +140,68 @@ def main():
                         ],
                         'label': 1 if pair['label'] != 0 else 0  # TODO: -1s
                     }
-                if 'amr_path' in pair: 
+
+                if args.use_amr and not pair['amr_path']:
+                    pair['amr_path'] = '{} _nopath_ {}'.format(pair['participant_a'],
+                                                               pair['participant_b'])
+                if args.use_sdg and not pair['sdg_path']:
+                    pair['sdg_path'] = '{} _nopath_ {}'.format(pair['participant_a'],
+                                                               pair['participant_b'])
+                    
+                if args.anonymize:
+                    placeholder_a = '__participant_a__'
+                    placeholder_b = '__participant_b__'
+
+                    flat[id]['interaction_tuple'][2] = placeholder_a
+                    flat[id]['interaction_tuple'][3] = placeholder_b
+                    if not args.use_sdg and not args.use_amr:
+                        raise NotImplementedError('Anonymization for this \
+                                                   setting is not implemented')
+                    if args.use_sdg:
+                        sdg_match_a = pair['sdg_path'].split()[0]
+                        sdg_match_b = pair['sdg_path'].split()[-1]
+                        pair['sdg_path'] = pair['sdg_path'].replace(sdg_match_a,
+                                                                    placeholder_a)
+                        pair['sdg_path'] = pair['sdg_path'].replace(sdg_match_b,
+                                                                    placeholder_b)
+                        tokenized_text = sentence['tokenized_text']
+                        tokenized_text = [placeholder_a if word == sdg_match_a
+                                          else word for word in tokenized_text]
+                        tokenized_text = [placeholder_b if word == sdg_match_b
+                                          else word for word in tokenized_text]
+                        sentence['tokenized_text'] = tokenized_text
+                        # sdg = sentence['sdg'].replace(sdg_match_a,
+                        #                               placeholder_a)
+                        # sdg = sdg.replace(sdg_match_b,
+                        #                   placeholder_b)
+
+                    if args.use_amr:
+                        amr_match_a = pair['amr_path'].split()[0]
+                        amr_match_b = pair['amr_path'].split()[-1]
+                        pair['amr_path'] = pair['amr_path'].replace(amr_match_a,
+                                                                    placeholder_a)
+                        pair['amr_path'] = pair['amr_path'].replace(amr_match_b,
+                                                                    placeholder_b)
+
+                    if sdg_match_a:
+                        participant_a = sdg_match_a
+                        participant_b = sdg_match_b
+                    else:
+                        participant_a = amr_match_a
+                        participant_b = amr_match_b
+                    text = flat[id]['text']
+                    text = text.replace(participant_a, placeholder_a)
+                    text = text.replace(participant_b, placeholder_b)
+                    flat[id]['text'] = text
+
+                if 'amr_path' in pair:
                     flat[id]['amr_path'] = pair['amr_path']
-                if 'sdg_path' in pair: 
+                if 'sdg_path' in pair:
                     flat[id]['sdg_path'] = pair['sdg_path']
-                if 'tokenized_text' in sentence: 
+                if 'tokenized_text' in sentence:
                     flat[id]['tokenized_text'] = sentence['tokenized_text']
                 if 'pos_tags' in sentence:
                     flat[id]['pos_tags'] = sentence['pos_tags']
-                    
-                if args.anonymize:
-                    text = flat[id]['text']
-                    participant_a = pair['participant_a'].strip()
-                    participant_b = pair['participant_b'].strip()
-                    text = text.replace(participant_a, ' placeholder first placeholder ')
-                    text = text.replace(participant_b, ' placeholder second placeholder ')
-                    flat[id]['text'] = text
 
 
     flat_json_string = json.dumps(flat, indent=True)
