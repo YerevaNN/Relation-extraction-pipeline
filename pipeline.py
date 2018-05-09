@@ -200,7 +200,7 @@ def main():
                 if args.use_sdg and not pair['sdg_path']:
                     pair['sdg_path'] = '{} _nopath_ {}'.format(pair['participant_a'],
                                                                pair['participant_b'])
-                    
+                tokenized_text = None
                 if args.anonymize:
                     placeholder_a = '__participant_a__'
                     placeholder_b = '__participant_b__'
@@ -222,7 +222,7 @@ def main():
                                           else word for word in tokenized_text]
                         tokenized_text = [placeholder_b if word == sdg_match_b
                                           else word for word in tokenized_text]
-                        sentence['tokenized_text'] = tokenized_text
+                        
                         # sdg = sentence['sdg'].replace(sdg_match_a,
                         #                               placeholder_a)
                         # sdg = sdg.replace(sdg_match_b,
@@ -252,7 +252,12 @@ def main():
                 if 'sdg_path' in pair:
                     flat[id]['sdg_path'] = pair['sdg_path']
                 if 'tokenized_text' in sentence:
-                    flat[id]['tokenized_text'] = sentence['tokenized_text']
+                    if tokenized_text is not None:
+                        # custom, anonymized version
+                        flat[id]['tokenized_text'] = tokenized_text
+                    else:
+                        # general version
+                        flat[id]['tokenized_text'] = sentence['tokenized_text']
                 if 'pos_tags' in sentence:
                     flat[id]['pos_tags'] = sentence['pos_tags']
 
