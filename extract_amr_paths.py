@@ -2,6 +2,7 @@ import argparse
 import io
 import json
 import penman
+import re
 from tqdm import tqdm
 
 def nodes_from_word(graph, word):
@@ -135,7 +136,14 @@ def main():
     output_paths = []
     l = []
     for id, amr, words in tqdm(data):
-        graph = penman.decode(amr)
+        try:
+            amr_parsed = re.sub(r"\~e\.[0-9,]+", "", amr)  # Removing alignment tags
+            amr_parsed = re.sub(r'"{2,}', '""', amr_parsed)  # Removing """"" this kind of things
+            graph = penman.decode(amr_parsed)
+        except:
+            print(amr)
+            print(amr_parsed)
+            raise Exception
         paths = paths_for_words(graph, words[0], words[1])
         if paths:
             for path in paths:
