@@ -23,13 +23,15 @@ def main():
     parser.add_argument('--input_text', '-i', required=True, type=str)
     parser.add_argument('--output_json', '-o', required=True, type=str)
     parser.add_argument('--tmp_dir', '-t', default='results/tmp', type=str)
-    parser.add_argument('--classifier_type', '-ct', default='RelationClassification', type=str)
+    parser.add_argument('--classifier_type', '-ct', default='RelationClassification', type=str,
+                        choices=['RelationClassification', 'fasttext'])
     parser.add_argument('--classifier_model', '-c', default='', type=str)
     parser.add_argument('--classifier_preprocessor', '-cp', default='', type=str)
     parser.add_argument('--use_amr', '-uamr', action='store_true')
     parser.add_argument('--amrs_from', type=str)
     parser.add_argument('--use_sdg', '-usdg', action='store_true')
-    parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str)
+    parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str,
+                        choices=['stanford', 'spacy'])
     parser.add_argument('--entity_recognizer', '-er', default='None', type=str, 
                         choices=['None', 'tagNERv2', 'byteNER'])
     parser.add_argument('--entities_from', type=str)
