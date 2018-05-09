@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--classifier_model', '-c', default='', type=str)
     parser.add_argument('--classifier_preprocessor', '-cp', default='', type=str)
     parser.add_argument('--use_amr', '-uamr', action='store_true')
+    parser.add_argument('--amrs_from', type=str)
     parser.add_argument('--use_sdg', '-usdg', action='store_true')
     parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str)
     parser.add_argument('--use_ground_truth_entities', '-ug', action='store_true')
@@ -82,13 +83,26 @@ def main():
     
     if args.use_amr:
         print('Adding AMRs...')
-        check_call(['python3', 'add_amr.py',
-                    '--input_text', args.input_text,
-                    '--input_json', args.output_json,
-                    '--model', 'amr2_bio7_best_after_2_fscore_0.6118.m',
-                    #'--model', 'bio_model_best.m',
-                    '--output_json', args.output_json,
-                    '--tmp_dir', args.tmp_dir])
+        if args.amrs_from:
+            with open(args.amrs_from, 'r', encoding='utf-8') as f:
+                amrs = json.load(f)
+            amr_dict = {}
+            for sample in amrs:
+                amr_dict[sample['id']] = sample['amr']
+            with open(args.output_json, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            for k in range(len(data)):
+                data[k]['amr'] = amr_dict[data[k]['id']]
+            with open(args.output_json, 'w', encoding='utf-8') as f:
+                json.dump(data, f)
+        else:
+            check_call(['python3', 'add_amr.py',
+                        '--input_text', args.input_text,
+                        '--input_json', args.output_json,
+                        '--model', 'amr2_bio7_best_after_2_fscore_0.6118.m',
+                        #'--model', 'bio_model_best.m',
+                        '--output_json', args.output_json,
+                        '--tmp_dir', args.tmp_dir])
         print('Done\n')
         
         print('Extracting AMR paths...')
@@ -218,7 +232,7 @@ def main():
                         '--output_path', after_classifier,
                         '--processor_path', args.classifier_preprocessor,
                         '--model_path', args.classifier_model
-                  ], cwd='submodules/RelationClassification/')
+                  ], cwd='submodules/RelationClassification/') # To Change!!!
         elif args.classifier_type == "fasttext":
             # TODO: this is pretty ugly. 
             # Preprocessing and postprocessing for fasttext and RelClass should be at the same level
