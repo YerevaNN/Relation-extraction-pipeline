@@ -30,8 +30,9 @@ def main():
     parser.add_argument('--amrs_from', type=str)
     parser.add_argument('--use_sdg', '-usdg', action='store_true')
     parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str)
-    parser.add_argument('--use_ground_truth_entities', '-ug', action='store_true')
-    parser.add_argument('--ground_truth_json', '-g', type=str)
+    parser.add_argument('--entity_recognizer', '-er', default='None', type=str, 
+                        choices=['None', 'tagNERv2', 'byteNER'])
+    parser.add_argument('--entities_from', type=str)
     parser.add_argument('--anonymize', '-a', action='store_true')
     args = parser.parse_args()
 
@@ -41,20 +42,24 @@ def main():
     
     ensure_dir(args.tmp_dir)  # not very necessary
     
-    if args.use_ground_truth_entities:
-        print("Getting ground truth entities and pairs...")
+    if args.entity_recognizer == 'None':
+        if args.entities_from:
+            print("Getting ground truth entities and pairs...")
+
+            with io.open(args.entities_from, encoding='utf-8') as fr:
+                with io.open(args.output_json, 'w', encoding='utf-8') as fw:
+                    ground_truth = fr.read()
+                    fw.write(ground_truth)
+
+            print('Done\n')
         
-        with io.open(args.ground_truth_json, encoding='utf-8') as fr:
-            with io.open(args.output_json, 'w', encoding='utf-8') as fw:
-                ground_truth = fr.read()
-                fw.write(ground_truth)
-        
-        print('Done\n')
-        
-    else:
+        else:
+            raise Exception("--entities_from is not specified")
+
+    elif args.entity_recognizer == 'tagNERv2':
         tokenized_input = os.path.join(args.tmp_dir, '{}.tokenized.txt'.format(basename))
         entities_output = os.path.join(args.tmp_dir, '{}.tokenized.txt.IOB'.format(basename))
-        candidate_tuples_json = os.path.join(args.tmp_dir, '{}.candidates.json'.format(basename))
+        # candidate_tuples_json = os.path.join(args.tmp_dir, '{}.candidates.json'.format(basename))
 
         print("Tokenizing...")
         # print("Adding spaces around -")
@@ -66,13 +71,12 @@ def main():
                     sentence = ' '.join(sentence.split())
                     fw.write("{}\t{}\n".format(id, sentence))
 
-        print('Running NER...')
+        print('Running tagNERv2...')
         check_call(['bash', 'tag_NER.sh',
                     '-i', tokenized_input,
                     '-f', 'IOB'], cwd='submodules/tag_NER_v2')
         print('Done\n')
         # the output is entities_output
-
         print('Building interaction tuples with unknown labels...')
         check_call(['python', 'iob_to_bind_json.py',
                     '--input_text', args.input_text,
@@ -80,6 +84,41 @@ def main():
                     '--output_json', args.output_json]) #candidate_tuples_json])
         print('Done\n')
 
+    elif args.entity_recognizer == 'byteNER':
+        input_without_ids = os.path.join(args.tmp_dir, '{}.noids.txt'.format(basename))
+        entities_output = os.path.join(args.tmp_dir, '{}.IOB'.format(basename))
+        entities_output_chr = os.path.join(args.tmp_dir, '{}.IOB.chr'.format(basename))
+        
+        print('Removing IDs from input for byteNER')
+        with io.open(args.input_text, encoding='utf-8') as fr:
+            with io.open(input_without_ids, 'w', encoding='utf-8') as fw:
+                for line in fr.readlines():
+                    id, sentence = line[:-1].split('\t')  # \n symbol
+                    fw.write("{}\n".format(sentence))
+        print("Done")
+        
+        print('Running byteNER...')
+        # requires Keras 2.0.6 on python2!
+        env = os.environ.copy()
+        env['KERAS_BACKEND'] = 'theano'
+        env['THEANO_FLAGS'] = 'dnn.enabled=False'
+        check_call(['python2', 'tagger.py',
+                    '-m', 'models/20CNN,dropout0.5,bytedrop0.3,lr0.0001,bytes,bpe,blstm,crf,biocreative.model', 
+                    '-i', input_without_ids, 
+                    '-o', entities_output,
+                    '--output_format', 'iob'], 
+                   cwd='submodules/byteNER', 
+                   env=env)
+        print('Done\n')        
+        
+        print('Building interaction tuples with unknown labels...')
+        check_call(['python', 'iob_to_bind_json.py',
+                    '--character_level',
+                    '--input_text', args.input_text,
+                    '--input_iob2', entities_output_chr,
+                    '--output_json', args.output_json]) #candidate_tuples_json])
+        print('Done\n')
+        
     
     if args.use_amr:
         print('Adding AMRs...')

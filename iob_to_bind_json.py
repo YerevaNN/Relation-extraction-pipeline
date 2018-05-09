@@ -16,6 +16,7 @@ def main():
     parser.add_argument('--input_iob2', '-i', required=True, type=str)
     parser.add_argument('--output_json', '-o', required=True, type=str)
     parser.add_argument('--clean_entities', action='store_true')
+    parser.add_argument('--character_level', action='store_true')
     args = parser.parse_args()
     
     protein_labels = ['proteingene', 'smallmolecule']  #, 'cellularcomponent', 'celltypeline']
@@ -51,14 +52,22 @@ def main():
     bind = False
     
     sentences = {}
+    sentence_ids = []
     with codecs.open(args.input_text, encoding='utf-8') as file:
         for line in file:
             id, sentence = line.split('\t')
             sentences[id] = sentence
+            sentence_ids.append(id)
+            
+    sentence_index = 0  # just in case IOB doesn't have IDs
 
     with codecs.open(args.input_iob2, encoding='utf-8') as file:
-        for line in file:
-            if line == '\n':
+        lines = file.readlines()
+        if lines[-1] != '\n':
+            lines.append('\n')
+        
+        for line in lines:
+            if line == '\n':  # sentence is completed
                 if curr_word:
                     curr_proteins.append(curr_word)
                     curr_word = ''
@@ -67,6 +76,11 @@ def main():
                 else:
                     all_tuples = []
                 
+                if id is None:
+                    # id was not available in IOB
+                    id = sentence_ids[sentence_index]
+                    sentence_index += 1
+                    
                 output.append({
                     "entities": curr_proteins, 
                     "extracted_information": all_tuples, 
@@ -80,7 +94,12 @@ def main():
                 continue
 
             try:
-                id, _, _, word, label = line.split()
+                line_parts = line.split()
+                if len(line_parts) == 5:
+                    id, _, _, word, label = line_parts
+                elif len(line_parts) == 2:
+                    word, label = line_parts
+                    id = None
             except:
                 print("ERROR")
                 print(line)
@@ -98,7 +117,12 @@ def main():
                 continue
             label = label[2:]
             if t == 'I' and curr_word:
-                curr_word += ' ' + word
+                if args.character_level:
+                    if word == '<SPACE>':
+                        word = ' '
+                    curr_word += word
+                else:
+                    curr_word += ' ' + word
             else:
                 if curr_word:
                     curr_proteins.append(curr_word)
