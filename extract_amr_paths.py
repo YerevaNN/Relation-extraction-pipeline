@@ -3,17 +3,20 @@ import io
 import json
 import penman
 import re
+from nltk.metrics.distance import edit_distance
 from tqdm import tqdm
 
 def nodes_from_word(graph, word):
-    nodes = []
-    for attr in graph.attributes():
+    #  SOFT MATCHING
+    ed_threshold = 1.
+    nodes = [(edit_distance(str(attr.target), word), attr)
+             for attr in graph.attributes()]
+    nodes = sorted(nodes)   
+    sources = [node[1].source for node in nodes 
+               if node[0] == nodes[0][0] and len(word) * ed_threshold > node[0]]
+    
+    return sources
         
-        if word.lower() == str(attr.target).lower() or \
-           word.lower() == '-'.join(str(attr.target).lower().split('-')[:-1]) or \
-           word.lower() == str(attr.target).lower()[1:-1]:
-            nodes.append(attr.source)
-    return list(set(nodes))
 
 def remove_quotes(word):
     if isinstance(word, str) and word[0] == '"' and word[-1] == '"':
