@@ -36,6 +36,7 @@ def main():
                         choices=['None', 'tagNERv2', 'byteNER'])
     parser.add_argument('--entities_from', type=str)
     parser.add_argument('--anonymize', '-a', action='store_true')
+    parser.add_argument('--add_symmetric_pairs', '-sym', action='store_true')
     args = parser.parse_args()
 
     basename = os.path.basename(args.input_text)
@@ -179,6 +180,19 @@ def main():
     with io.open(args.output_json, encoding='utf-8') as fr:
         dense = json.load(fr)
         flat = {}
+        if args.add_symmetric_pairs:
+            # useful for symmetric interactions like `bind`
+            print("Adding symmetric pairs...")
+            for sentence in dense:
+                sym = []
+                for i, pair in enumerate(sentence['extracted_information']):
+                    reverse_pair = pair.copy()
+                    reverse_pair['participant_a'] = pair['participant_b']
+                    reverse_pair['participant_b'] = pair['participant_a']
+                    reverse_pair['_sym_of'] = i
+                    sym.append(reverse_pair)
+                sentence['extracted_information'] += sym
+                
         if args.anonymize:
             print("Anonymizing...")
         for sentence in dense:
@@ -195,7 +209,9 @@ def main():
                         ],
                         'label': 1 if pair['label'] != 0 else 0  # TODO: -1s
                     }
-
+                if '_sym_of' in pair:
+                    flat[id]['_sym_of'] = "{}|{}".format(sentence['id'], pair['_sym_of'])
+                    
                 if args.use_amr and not pair['amr_path']:
                     pair['amr_path'] = '{} _nopath_ {}'.format(pair['participant_a'],
                                                                pair['participant_b'])
