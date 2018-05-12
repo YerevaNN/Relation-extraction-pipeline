@@ -21,6 +21,7 @@ def normalize_set(interaction_tuple):
     return frozenset(interaction_tuple)
 
 def hash_sentence(item):
+    return item['id']
     text = item['text']
     text = text.lower()
     text = re.sub('[^0-9a-z]+', '', text)
@@ -172,6 +173,10 @@ def main():
 #        raise "Not implemented"
         truth_sentences = get_sentences(truth, positive_labels, only=args.only)
         pred_sentences = get_sentences(prediction, positive_labels, only=args.only)
+        print("Total true relations: {}".format(sum([len(ts) for ts in truth_sentences.values()])))
+        for ts in truth_sentences.values():
+            print(ts)
+            break
         print("{} truth sentences read from json. {} objects extracted".format(len(truth), len(truth_sentences)))
         print("{} pred sentences read from json. {} objects extracted".format(len(prediction), len(pred_sentences)))
         
