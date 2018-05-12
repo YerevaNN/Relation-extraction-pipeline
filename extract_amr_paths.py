@@ -140,13 +140,16 @@ def main():
     l = []
     for id, amr, words in tqdm(data):
         try:
-            amr_parsed = re.sub(r"\~e\.[0-9,]+", "", amr)  # Removing alignment tags
-            amr_parsed = re.sub(r'"{2,}', '""', amr_parsed)  # Removing """"" this kind of things
+            amr_parsed = amr
+            while amr_parsed != re.sub(r'"([^~"]*)"+([^~]*)"~', '"\\1\\2"~', amr_parsed):
+                amr_parsed = re.sub(r'"([^~"]*)"+([^~]*)"~', '"\\1\\2"~', amr_parsed)
+            amr_parsed = re.sub(r"\~e\.[0-9,]+", "", amr_parsed)  # Removing alignment tags
+            # amr_parsed = re.sub(r'"{2,}', '""', amr_parsed)  # Removing """"" this kind of things
             graph = penman.decode(amr_parsed)
         except:
             print(amr)
             print(amr_parsed)
-            raise Exception
+            raise Exception("AMR can not be parsed by PenMan")
         paths = paths_for_words(graph, words[0], words[1])
         if paths:
             for path in paths:
