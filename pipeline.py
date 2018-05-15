@@ -121,7 +121,23 @@ def main():
                     '--input_iob2', entities_output_chr,
                     '--output_json', args.output_json]) #candidate_tuples_json])
         print('Done\n')
-        
+    if args.add_symmetric_pairs:
+        # useful for symmetric interactions like `bind`
+        with io.open(args.output_json, 'r', encoding='utf-8') as f:
+            dense = json.load(f)
+            print("Adding symmetric pairs...")
+            for sentence in dense:
+                sym = []
+                for i, pair in enumerate(sentence['extracted_information']):
+                    reverse_pair = pair.copy()
+                    reverse_pair['participant_a'] = pair['participant_b']
+                    reverse_pair['participant_b'] = pair['participant_a']
+                    reverse_pair['_sym_of'] = i
+                    sym.append(reverse_pair)
+                sentence['extracted_information'] += sym
+        with io.open(args.output_json, 'w', encoding='utf-8') as f:
+            json.dump(dense, f)
+                
     
     if args.use_amr:
         print('Adding AMRs...')
@@ -180,19 +196,6 @@ def main():
     with io.open(args.output_json, encoding='utf-8') as fr:
         dense = json.load(fr)
         flat = {}
-        if args.add_symmetric_pairs:
-            # useful for symmetric interactions like `bind`
-            print("Adding symmetric pairs...")
-            for sentence in dense:
-                sym = []
-                for i, pair in enumerate(sentence['extracted_information']):
-                    reverse_pair = pair.copy()
-                    reverse_pair['participant_a'] = pair['participant_b']
-                    reverse_pair['participant_b'] = pair['participant_a']
-                    reverse_pair['_sym_of'] = i
-                    sym.append(reverse_pair)
-                sentence['extracted_information'] += sym
-                
         if args.anonymize:
             print("Anonymizing...")
         for sentence in dense:
@@ -335,6 +338,8 @@ def main():
                 for pair in sentence['extracted_information']:
                     if pair['id'] in flat:
                         pair['label'] = flat[pair['id']]['prediction']
+                        if 'probabilities' in flat[pair['id']]:
+                            pair['probabilities'] = flat[pair['id']]['probabilities']
                         found += 1
                     else:
                         missing += 1
