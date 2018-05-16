@@ -6,7 +6,9 @@ from __future__ import division
 
 import io
 import argparse
+from glob import glob
 import json
+import numpy as np
 
 import os
 from subprocess import check_call, check_output
@@ -25,8 +27,8 @@ def main():
     parser.add_argument('--tmp_dir', '-t', default='results/tmp', type=str)
     parser.add_argument('--classifier_type', '-ct', default='RelationClassification', type=str,
                         choices=['RelationClassification', 'fasttext'])
-    parser.add_argument('--classifier_model', '-c', default='', type=str)
-    parser.add_argument('--classifier_preprocessor', '-cp', default='', type=str)
+    parser.add_argument('--classifier_model', '-c', nargs='*', type=str)
+    parser.add_argument('--classifier_preprocessor', '-cp', nargs='*', type=str)
     parser.add_argument('--use_amr', '-uamr', action='store_true')
     parser.add_argument('--amrs_from', type=str)
     parser.add_argument('--use_sdg', '-usdg', action='store_true')
@@ -37,7 +39,8 @@ def main():
     parser.add_argument('--entities_from', type=str)
     parser.add_argument('--anonymize', '-a', action='store_true')
     parser.add_argument('--add_symmetric_pairs', '-sym', action='store_true')
-	# TODO: ensemble mode: majority_vote, average
+    parser.add_argument('--ensembling_mode', '-ens', type=str, default='average',
+                        choices=['average', 'majority_vote'])
     args = parser.parse_args()
 
     basename = os.path.basename(args.input_text)
@@ -191,7 +194,9 @@ def main():
     # raise Exception("Classifier is not ready!")
     
     before_classifier = os.path.join(args.tmp_dir, '{}.before-classifier.json'.format(basename))
-    after_classifier = os.path.join(args.tmp_dir, '{}.after-classifier.json'.format(basename))
+    after_classifier = os.path.join(args.tmp_dir, '{}.after-classifier.0.json'.format(basename))
+    after_classifier_format_string = os.path.join(args.tmp_dir,
+                                                  '{}.after-classifier.{}.json'.format(basename, "{}"))
     
     print("Converting dense JSON to flat JSON: {} ...".format(before_classifier))      
     with io.open(args.output_json, encoding='utf-8') as fr:
@@ -292,14 +297,17 @@ def main():
 
     print('Detecting true interactions using {} ...'.format(args.classifier_type))
     if args.classifier_type == "RelationClassification":
-        # TODO: loop over the models
-        check_call(['python',
-                    'predict.py',
-                    '--input_path', before_classifier,
-                    '--output_path', after_classifier,
-                    '--processor_path', args.classifier_preprocessor,
-                    '--model_path', args.classifier_model
-              ], cwd='submodules/RelationClassification/') 
+        for i, (model, processor) in enumerate(zip(args.classifier_model,
+                                                   args.classifier_preprocessor)):
+            print('Running model number {}'.format(i))
+            print('Model filepath: {}'.format(model))
+            check_call(['python',
+                        'predict.py',
+                        '--input_path', before_classifier,
+                        '--output_path', after_classifier_format_string.format(i),
+                        '--processor_path', processor,
+                        '--model_path', model,
+                  ], cwd='submodules/RelationClassification/')
     elif args.classifier_type == "fasttext":
         # TODO: this does not support multiple models!
         # TODO: this is pretty ugly. 
@@ -330,26 +338,46 @@ def main():
         flat_json_string = json.dumps(flat, indent=True)
         with io.open(after_classifier, 'w', encoding='utf-8') as fw:
             fw.write(flat_json_string)
+
+    for after_classifier in sorted(glob(after_classifier_format_string.format('*'))):
+        print("Reading classifier output from flat JSON: {} ...".format(after_classifier))
+        with io.open(after_classifier, encoding='utf-8') as fr:
+            flat = json.load(fr)
+            found = 0
+            missing = 0
+            for sentence in dense:
+                for pair in sentence['extracted_information']:
+                    if pair['id'] in flat:
+                        if 'predictions' not in pair:
+                            pair['predictions'] = []
+                        if 'probabilities' not in pair:
+                            pair['probabilities'] = []
+                        pair['predictions'].append(flat[pair['id']]['prediction'])
+                        if 'probabilities' in flat[pair['id']]:
+                            pair['probabilities'].append(flat[pair['id']]['probabilities'])
+                        found += 1
+                    else:
+                        missing += 1
+            print("{}/{} items did not have predictions in {}".format(missing,
+                                                                      missing+found,
+                                                                      after_classifier))
     
-    # TODO: loop over `after_classifier`s
-    print("Reading classifier output from flat JSON: {} ...".format(after_classifier))      
-    with io.open(after_classifier, encoding='utf-8') as fr:
-        flat = json.load(fr)
-        found = 0
-        missing = 0
-        for sentence in dense:
-            for pair in sentence['extracted_information']:
-                if pair['id'] in flat:
-                    pair['label'] = flat[pair['id']]['prediction']  # TODO: append to arrays
-                    if 'probabilities' in flat[pair['id']]:
-                        pair['probabilities'] = flat[pair['id']]['probabilities']  # TODO: append to arrays
-                    found += 1
+
+    #  Performing Ensembling
+
+    for sentence in dense:
+        for pair in sentence['extracted_information']:
+            if args.ensembling_mode == 'majority_vote':
+                if sum(pair['predictions']) / len(pair['predictions']) < 0.5:
+                    pair['label'] = 0
                 else:
-                    missing += 1
-        print("{}/{} items did not have predictions".format(missing, missing+found))
-    
-    # TODO: perform ensembling in `dense` object
-    
+                    pair['label'] = 1
+            else: # args.ensembling_mode = 'average'
+                prob = np.array(pair['probabilities']).mean(axis=0)
+                pair['label'] = int(prob.argmax())
+
+
+
     with io.open(args.output_json, 'w', encoding='utf-8') as fw:
         dense_json_string = json.dumps(dense, indent=True)
         fw.write(dense_json_string)
