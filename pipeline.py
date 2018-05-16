@@ -37,6 +37,7 @@ def main():
     parser.add_argument('--entities_from', type=str)
     parser.add_argument('--anonymize', '-a', action='store_true')
     parser.add_argument('--add_symmetric_pairs', '-sym', action='store_true')
+	# TODO: ensemble mode: majority_vote, average
     args = parser.parse_args()
 
     basename = os.path.basename(args.input_text)
@@ -284,69 +285,74 @@ def main():
 
 
     flat_json_string = json.dumps(flat, indent=True)
-    if not os.path.exists(before_classifier):        
-        with io.open(before_classifier, 'w', encoding='utf-8') as fw:
-            fw.write(flat_json_string)
-        print("Done!")
+    
+    with io.open(before_classifier, 'w', encoding='utf-8') as fw:
+        fw.write(flat_json_string)
+    print("Done!")
 
-        print('Detecting true interactions using {} ...'.format(args.classifier_type))
-        if args.classifier_type == "RelationClassification":
-            check_call(['python',
-                        'predict.py',
-                        '--input_path', before_classifier,
-                        '--output_path', after_classifier,
-                        '--processor_path', args.classifier_preprocessor,
-                        '--model_path', args.classifier_model
-                  ], cwd='submodules/RelationClassification/') # To Change!!!
-        elif args.classifier_type == "fasttext":
-            # TODO: this is pretty ugly. 
-            # Preprocessing and postprocessing for fasttext and RelClass should be at the same level
-            before_fasttext = os.path.join(args.tmp_dir, '{}.before-fasttext.txt'.format(basename))
-            fasttext_keys = []
-            
-            with io.open(before_fasttext, 'w', encoding='utf-8') as fw:
-                for k,v in flat.items():
-                    fw.write("{}\n".format(v['text']))
-                    fasttext_keys.append(k)
-                    
-            fasttext_output = check_output(['fasttext',
-                'predict',
-                args.classifier_model,
-                before_fasttext,
-                #after_classifier
-               ])
-            fasttext_labels = fasttext_output.decode('utf-8').split('\n')
-            
-            for i, k in enumerate(fasttext_keys):
-                label_string = fasttext_labels[i]
-                if not label_string.startswith("__label__"):
-                    print("Error: invalid label: {}".format(label_string))
-                else:
-                    flat[k]['prediction'] = int(label_string[9:])
-                    
-            flat_json_string = json.dumps(flat, indent=True)
-            with io.open(after_classifier, 'w', encoding='utf-8') as fw:
-                fw.write(flat_json_string)
+    print('Detecting true interactions using {} ...'.format(args.classifier_type))
+    if args.classifier_type == "RelationClassification":
+        # TODO: loop over the models
+        check_call(['python',
+                    'predict.py',
+                    '--input_path', before_classifier,
+                    '--output_path', after_classifier,
+                    '--processor_path', args.classifier_preprocessor,
+                    '--model_path', args.classifier_model
+              ], cwd='submodules/RelationClassification/') 
+    elif args.classifier_type == "fasttext":
+        # TODO: this does not support multiple models!
+        # TODO: this is pretty ugly. 
+        # Preprocessing and postprocessing for fasttext and RelClass should be at the same level
+        before_fasttext = os.path.join(args.tmp_dir, '{}.before-fasttext.txt'.format(basename))
+        fasttext_keys = []
         
+        with io.open(before_fasttext, 'w', encoding='utf-8') as fw:
+            for k,v in flat.items():
+                fw.write("{}\n".format(v['text']))
+                fasttext_keys.append(k)
+                
+        fasttext_output = check_output(['fasttext',
+            'predict',
+            args.classifier_model,
+            before_fasttext,
+            #after_classifier
+           ])
+        fasttext_labels = fasttext_output.decode('utf-8').split('\n')
+        
+        for i, k in enumerate(fasttext_keys):
+            label_string = fasttext_labels[i]
+            if not label_string.startswith("__label__"):
+                print("Error: invalid label: {}".format(label_string))
+            else:
+                flat[k]['prediction'] = int(label_string[9:])
+                
+        flat_json_string = json.dumps(flat, indent=True)
+        with io.open(after_classifier, 'w', encoding='utf-8') as fw:
+            fw.write(flat_json_string)
+    
+    # TODO: loop over `after_classifier`s
     print("Reading classifier output from flat JSON: {} ...".format(after_classifier))      
     with io.open(after_classifier, encoding='utf-8') as fr:
-        with io.open(args.output_json, 'w', encoding='utf-8') as fw:
-            flat = json.load(fr)
-            found = 0
-            missing = 0
-            for sentence in dense:
-                for pair in sentence['extracted_information']:
-                    if pair['id'] in flat:
-                        pair['label'] = flat[pair['id']]['prediction']
-                        if 'probabilities' in flat[pair['id']]:
-                            pair['probabilities'] = flat[pair['id']]['probabilities']
-                        found += 1
-                    else:
-                        missing += 1
-            print("{}/{} items did not have predictions".format(missing, missing+found))
-            
-            dense_json_string = json.dumps(dense, indent=True)
-            fw.write(dense_json_string)
+        flat = json.load(fr)
+        found = 0
+        missing = 0
+        for sentence in dense:
+            for pair in sentence['extracted_information']:
+                if pair['id'] in flat:
+                    pair['label'] = flat[pair['id']]['prediction']  # TODO: append to arrays
+                    if 'probabilities' in flat[pair['id']]:
+                        pair['probabilities'] = flat[pair['id']]['probabilities']  # TODO: append to arrays
+                    found += 1
+                else:
+                    missing += 1
+        print("{}/{} items did not have predictions".format(missing, missing+found))
+    
+    # TODO: perform ensembling in `dense` object
+    
+    with io.open(args.output_json, 'w', encoding='utf-8') as fw:
+        dense_json_string = json.dumps(dense, indent=True)
+        fw.write(dense_json_string)
     print("Done!")
 
     # replace protein names with identifiers
