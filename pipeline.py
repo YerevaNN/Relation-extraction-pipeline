@@ -7,8 +7,10 @@ from __future__ import division
 import io
 import argparse
 from glob import glob
+import html
 import json
 import numpy as np
+import re
 
 import os
 from subprocess import check_call, check_output
@@ -19,6 +21,17 @@ def ensure_dir(dir):
         os.makedirs(dir)
     except OSError:
         pass
+
+
+def double_normalize_text(s, lower=True):
+    s = html.unescape(s)
+    s = re.sub(r'([\.,\'\"_\(\)/-])', r' \1 ', s)
+    s = re.sub('\s+', ' ', s)
+    if lower:
+        s = s.lower()
+    s = s.strip()
+    return s
+
 
 def main():
     parser = argparse.ArgumentParser()
@@ -31,6 +44,7 @@ def main():
     parser.add_argument('--classifier_preprocessor', '-cp', nargs='*', type=str)
     parser.add_argument('--use_amr', '-uamr', action='store_true')
     parser.add_argument('--amrs_from', type=str)
+    parser.add_argument('--tokenize', action='store_true')
     parser.add_argument('--use_sdg', '-usdg', action='store_true')
     parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str,
                         choices=['stanford', 'spacy'])
@@ -48,6 +62,7 @@ def main():
     print("Using tmp dir: {}".format(args.tmp_dir))
     
     ensure_dir(args.tmp_dir)  # not very necessary
+
     
     if args.entity_recognizer == 'None':
         if args.entities_from:
@@ -125,6 +140,21 @@ def main():
                     '--input_iob2', entities_output_chr,
                     '--output_json', args.output_json]) #candidate_tuples_json])
         print('Done\n')
+        
+    pretokenized_input = os.path.join(args.tmp_dir, '{}.pretokenized.txt'.format(basename))
+    if args.tokenize:
+        with open(args.input_text, 'r', encoding='utf-8') as fr:
+            with open(pretokenized_input, 'w', encoding='utf-8') as fw:
+                for line in fr:
+                    id, sentence = line[:-1].split('\t')
+                    sentence = double_normalize_text(sentence, lower=False)
+                    # although fasttext vectors require lower(), RelClass handles it internally
+                    fw.write("{}\t{}\n".format(id, sentence))
+    else:
+        with open(args.input_text, 'r', encoding='utf-8') as fr:
+            with open(pretokenized_input, 'w', encoding='utf-8') as fw:
+                fw.write(fr.read())     
+       
     if args.add_symmetric_pairs:
         # useful for symmetric interactions like `bind`
         with io.open(args.output_json, 'r', encoding='utf-8') as f:
@@ -159,7 +189,7 @@ def main():
                 json.dump(data, f)
         else:
             check_call(['python3', 'add_amr.py',
-                        '--input_text', args.input_text,
+                        '--input_text', pretokenized_input,
                         '--input_json', args.output_json,
                         '--model', 'amr2_bio7_best_after_2_fscore_0.6118.m',
                         #'--model', 'bio_model_best.m',
@@ -177,7 +207,7 @@ def main():
     if args.use_sdg:        
         print('Adding Stanford Dependency Graphs...')
         check_call(['python', 'add_sdg.py',
-                    '--input_text', args.input_text,
+                    '--input_text', pretokenized_input,
                     '--input_json', args.output_json,
                     '--output_json', args.output_json,
                     '--model', args.sdg_model,
