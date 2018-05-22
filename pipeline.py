@@ -293,7 +293,7 @@ def main():
                         pair['amr_path'] = pair['amr_path'].replace(amr_match_b,
                                                                     placeholder_b)
 
-                    if sdg_match_a:
+                    if args.use_sdg:
                         participant_a = sdg_match_a
                         participant_b = sdg_match_b
                     else:
