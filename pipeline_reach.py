@@ -10,6 +10,7 @@ import itertools
 import json
 import requests
 import time
+from tqdm import tqdm
 
 from os import path, makedirs
 from subprocess import call
@@ -41,7 +42,7 @@ def main():
     positive_pairs = 0
 
     with codecs.open(args.input_text, 'r', encoding='utf-8') as input_file:
-        for i, line in enumerate(input_file):
+        for i, line in tqdm(enumerate(input_file)):
             line = line.strip()
             
             id, sentence = line.split('\t')
@@ -50,8 +51,8 @@ def main():
             # TODO: understand how to parse fries
             while True:
                 try:
-                    response_index = requests.post('http://agathon.sista.arizona.edu:8080/odinweb/api/text', 
-                                                   params={'text': sentence, 'output': 'indexcard'})
+                    # response_index = requests.post('http://agathon.sista.arizona.edu:8080/odinweb/api/text', 
+                      #                             params={'text': sentence, 'output': 'indexcard'})
                     response_fries = requests.post('http://agathon.sista.arizona.edu:8080/odinweb/api/text', 
                                                params={'text': sentence, 'output': 'fries'})
                     break
@@ -62,7 +63,7 @@ def main():
                     pass
                 
             try:
-                data_indexcard = json.loads(response_index.content)
+                data_indexcard = {} #json.loads(response_index.content)
                 data_fries = json.loads(response_fries.content)
                 
                 if 'cards' in data_indexcard:
@@ -96,7 +97,7 @@ def main():
                 print(e)
                 print("ERROR: Skipping the sentence: {}".format(line))
                 
-            print("{} positive pairs found from {} sentences".format(positive_pairs, i+1))
+            #print("{} positive pairs found from {} sentences".format(positive_pairs, i+1))
 
 
     print("Saving the output to {}".format(args.output_json))
