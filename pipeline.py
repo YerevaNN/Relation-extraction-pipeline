@@ -10,6 +10,7 @@ from glob import glob
 import html
 import json
 import numpy as np
+from nltk.metrics.distance import edit_distance
 import re
 
 import os
@@ -183,8 +184,8 @@ def main():
                 amr_dict[sample['id']] = sample['amr']
             with open(args.output_json, 'r', encoding='utf-8') as f:
                 data = json.load(f)
-            for k in range(len(data)):
-                data[k]['amr'] = amr_dict[data[k]['id']]
+            for sentence in data:
+                sentence['amr'] = amr_dict[sentence['id']]
             with open(args.output_json, 'w', encoding='utf-8') as f:
                 json.dump(data, f)
         else:
@@ -204,6 +205,30 @@ def main():
                     '--tmp_dir', args.tmp_dir])
         print('Done\n')
 
+        print('Appending Amr Soft-Matching Statistics...')
+        with open(args.output_json, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        for sentence in data:
+            for info in sentence['extracted_information']:
+                participant_a = info['participant_a']
+                participant_b = info['participant_b']
+                if not info['amr_path']:
+                    info['amr_path'] = '{} _nopath_ {}'.format(participant_a,
+                                                               participant_b)
+                    info['amr_soft_match_distance_a'] = -1 
+                    info['amr_soft_match_distance_b'] = -1 
+                else:
+                    amr_match_a = info['amr_path'].split()[0]
+                    amr_match_b = info['amr_path'].split()[-1]
+                    info['amr_soft_match_distance_a'] = edit_distance(participant_a,
+                                                                      amr_match_a)
+                    info['amr_soft_match_distance_b'] = edit_distance(participant_b,
+                                                                      amr_match_b)
+        with open(args.output_json, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+        print('Done')
+
     if args.use_sdg:        
         print('Adding Stanford Dependency Graphs...')
         check_call(['python', 'add_sdg.py',
@@ -220,6 +245,30 @@ def main():
                     '--output_json', args.output_json])
         print('Done\n')
     
+        print('Appending SDG Soft-Matching Statistics...')
+        with open(args.output_json, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        
+        for sentence in data:
+            for info in sentence['extracted_information']:
+                 participant_a = info['participant_a']
+                 participant_b = info['participant_b']
+                 if not info['sdg_path']:
+                    info['sdg_path'] = '{} _nopath_ {}'.format(participant_a,
+                                                               participant_b)
+                    info['sdg_soft_match_distance_a'] = -1 
+                    info['sdg_soft_match_distance_b'] = -1 
+                 else:
+                    sdg_match_a = info['sdg_path'].split()[0]
+                    sdg_match_b = info['sdg_path'].split()[-1]
+                    info['sdg_soft_match_distance_a'] = edit_distance(participant_a,
+                                                                      sdg_match_a)
+                    info['sdg_soft_match_distance_b'] = edit_distance(participant_b,
+                                                                      sdg_match_b)
+        with open(args.output_json, 'w', encoding='utf-8') as f:
+            json.dump(data, f)
+
+        print('Done')
 
     # raise Exception("Classifier is not ready!")
     
@@ -251,12 +300,6 @@ def main():
                 if '_sym_of' in pair:
                     flat[id]['_sym_of'] = "{}|{}".format(sentence['id'], pair['_sym_of'])
                     
-                if args.use_amr and not pair['amr_path']:
-                    pair['amr_path'] = '{} _nopath_ {}'.format(pair['participant_a'],
-                                                               pair['participant_b'])
-                if args.use_sdg and not pair['sdg_path']:
-                    pair['sdg_path'] = '{} _nopath_ {}'.format(pair['participant_a'],
-                                                               pair['participant_b'])
                 tokenized_text = None
                 if args.anonymize:
                     placeholder_a = '__participant_a__'
