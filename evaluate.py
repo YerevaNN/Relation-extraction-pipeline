@@ -7,6 +7,9 @@ import argparse
 import itertools
 import re
 from sentence_filters import multiword, tags
+import soft_text_match as stm
+import numpy as np
+
 
 config = {
     "match_by": None
@@ -68,7 +71,7 @@ def get_sentences(data, positive_labels, only=''):
     return grouped_data
 
 
-def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
+def evaluate_sentences(truth_sentences, pred_sentences, keys=None, is_soft_match=False):
     TP = 0
     FN = 0
     FP = 0
@@ -80,22 +83,116 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
         sentence_truth_tuples = truth_sentences.get(sentence)
         sentence_pred_tuples = pred_sentences.get(sentence, frozenset())
 
-        common = sentence_truth_tuples.intersection(sentence_pred_tuples)
-        sentence_TP = len(common)
-        sentence_FN = len(sentence_truth_tuples) - sentence_TP
-        sentence_FP = len(sentence_pred_tuples) - sentence_TP
+        if not is_soft_match:
+            common = sentence_truth_tuples.intersection(sentence_pred_tuples)
+            sentence_TP = len(common)
+            sentence_FN = len(sentence_truth_tuples) - sentence_TP
+            sentence_FP = len(sentence_pred_tuples) - sentence_TP
+        else:
+            sentence_TP, sentence_FN, sentence_FP = evaluate_soft_match(
+                gold_tuples=list(sentence_truth_tuples),
+                prediction_tuples=list(sentence_pred_tuples),
+            )
 
         TP += sentence_TP
         FN += sentence_FN
         FP += sentence_FP
     
-    return TP, FN, FP
+    return TP, FN, FP             
+
+
+def soft_match_wrapper(term, gold_term, stm_obj):
+    #
+    if (term is None) or (gold_term is None):
+        assert not ((term is None) and (gold_term is None))
+        return None
+    else:
+        return stm_obj.find_max_match_term(term, [gold_term])
+
+
+def soft_match_tuple(
+        tuple,
+        gold_tuple,
+        stm_obj_entity,
+):
+    #
+    # print tuple
+    # print gold_tuple
+    assert len(tuple) == 2, tuple
+    assert len(gold_tuple) == 2, gold_tuple
+    #
+    match_score = 0.0
+    #
+    assert tuple[0] is not None
+    assert gold_tuple[0] is not None
+    matched_protein = soft_match_wrapper(tuple[0], gold_tuple[0], stm_obj_entity)
+    if matched_protein is None:
+        return 0.0
+    else:
+        match_score += matched_protein[2]
+    #
+    assert tuple[1] is not None
+    assert gold_tuple[1] is not None
+    matched_protein2 = soft_match_wrapper(tuple[1], gold_tuple[1], stm_obj_entity)
+    if matched_protein2 is None:
+        return 0.0
+    else:
+        match_score += matched_protein2[2]
+    #
+    return match_score/len(tuple)
+
+
+def evaluate_soft_match(gold_tuples, prediction_tuples):
+    # 
+    gold_tuples = [curr_gold_tuple for curr_gold_tuple in gold_tuples if len(curr_gold_tuple) == 2]
+    prediction_tuples = [curr_tuple for curr_tuple in prediction_tuples if len(curr_tuple) == 2]
+    # 
+    len_gold_tuples = len(gold_tuples)
+    len_prediction_tuples = len(prediction_tuples)
+    #
+    if len_gold_tuples == 0:
+        return 0, 0, len_prediction_tuples
+    # 
+    stm_obj_entity = stm.SoftTextMatch(min_match_ratio=0.7, is_substring_match=True, is_stem=False)
+    match_gold_idx = []
+    #
+    tp = 0
+    #
+    for curr_tuple in prediction_tuples:
+        #
+        curr_tuple = list(curr_tuple)
+        #
+        match_scores = np.zeros(len_gold_tuples)
+        for curr_gold_idx in range(len_gold_tuples):
+            curr_gold_tuple = gold_tuples[curr_gold_idx]
+            curr_gold_tuple = list(curr_gold_tuple)
+            curr_match_score = soft_match_tuple(curr_tuple, curr_gold_tuple, stm_obj_entity)
+            curr_match_score_rev = soft_match_tuple(curr_tuple, list(reversed(curr_gold_tuple)), stm_obj_entity)
+            match_scores[curr_gold_idx] = max(curr_match_score, curr_match_score_rev)
+            curr_match_score = None
+            curr_match_score_rev = None
+        #
+        max_match_score = match_scores.max()
+        if max_match_score > 0.8:
+            tp += 1
+            curr_match_gold_idx = match_scores.argmax()
+
+            # print gold_tuples[curr_match_gold_idx]
+
+            if curr_match_gold_idx not in match_gold_idx:
+                match_gold_idx.append(curr_match_gold_idx)
+    #
+    fn = len_gold_tuples - tp
+    fp = len_prediction_tuples - tp
+    #
+    return tp, fn, fp
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--truth_path', '-t', required=True, type=str)
     parser.add_argument('--prediction_path', '-p', required=True, type=str)
+        
     parser.add_argument('--only', default='', type=str)
     parser.add_argument('--only_bind', action='store_true')
     parser.add_argument('--sentence_level', action='store_true')
@@ -110,6 +207,8 @@ def main():
     parser.add_argument('--match_by', '-mb', default='id', type=str, 
                         choices=['id', 'text'])
                         
+    parser.add_argument('--soft_match', '-sm', action='store_true', default=False)
+
     args = parser.parse_args()
     
     config['match_by'] = args.match_by
@@ -174,15 +273,15 @@ def main():
         if args.bootstrap_count > 0:
             print("Bootstrapping is not implemented for this setup")
 
-        intersection = truth_tuples_set.intersection(prediction_tuples_set)
-        union = truth_tuples_set.union(prediction_tuples_set)
+        if not args.soft_match:
+            intersection = truth_tuples_set.intersection(prediction_tuples_set)
+            union = truth_tuples_set.union(prediction_tuples_set)
 
-        TP = len(intersection)
-        FN = len(truth_tuples_set) - TP
-        FP = len(prediction_tuples_set) - TP
-        
-        
-
+            TP = len(intersection)
+            FN = len(truth_tuples_set) - TP
+            FP = len(prediction_tuples_set) - TP
+        else:
+            TP, FN, FP = evaluate_soft_match(gold_tuples=truth_tuples_set, prediction_tuples=prediction_tuples_set)
     else:
 #        raise "Not implemented"
         truth_sentences = get_sentences(truth, positive_labels, only=args.only)
@@ -204,7 +303,7 @@ def main():
             print("Starting to bootstrap for {} times".format(args.bootstrap_count))
             for i in range(args.bootstrap_count):
                 cur_keys = sk_utils.resample(keys, n_samples=len(keys))
-                TP, FN, FP = evaluate_sentences(truth_sentences, pred_sentences, cur_keys)
+                TP, FN, FP = evaluate_sentences(truth_sentences, pred_sentences, cur_keys, is_soft_match=args.soft_match)
                 precision = TP / (TP + FP)
                 recall = TP / (TP + FN)
                 fscore = 2 * precision * recall / (precision + recall)
@@ -225,7 +324,7 @@ def main():
             
         print("Bootstrapping completed")
 
-        TP, FN, FP = evaluate_sentences(truth_sentences, pred_sentences)
+        TP, FN, FP = evaluate_sentences(truth_sentences, pred_sentences, is_soft_match=args.soft_match)
 
     print("\n")
     print("True Positive: {}".format(TP))
