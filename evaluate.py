@@ -8,6 +8,10 @@ import itertools
 import re
 from sentence_filters import multiword, tags
 
+config = {
+    "match_by": None
+}
+
 def normalize(text):
     if text:
         text = text.lower()
@@ -21,11 +25,15 @@ def normalize_set(interaction_tuple):
     return frozenset(interaction_tuple)
 
 def hash_sentence(item):
-    return item['id']
-    text = item['text']
-    text = text.lower()
-    text = re.sub('[^0-9a-z]+', '', text)
-    return hash(text)
+    if config['match_by'] == 'id':
+        return item['id']
+    elif config['match_by'] == 'text':
+        text = item['text']
+        text = text.lower()
+        text = re.sub('[^0-9a-z]+', '', text)
+        return hash(text)
+    else:
+        raise Exception("Cannot compute hash for sentences")
 
 def get_true_tuples(data, positive_labels):
     return [
@@ -98,7 +106,13 @@ def main():
     parser.add_argument('--tags', default='', type=str, help='example: complex+1,abbr-1')
     parser.add_argument('--has_sdg', default=0, type=int, help='+1 or -1')
     
+    parser.add_argument('--sentence_stats', action='store_true')
+    parser.add_argument('--match_by', '-mb', default='id', type=str, 
+                        choices=['id', 'text'])
+                        
     args = parser.parse_args()
+    
+    config['match_by'] = args.match_by
     
     print(args)
     
@@ -174,9 +188,7 @@ def main():
         truth_sentences = get_sentences(truth, positive_labels, only=args.only)
         pred_sentences = get_sentences(prediction, positive_labels, only=args.only)
         print("Total true relations: {}".format(sum([len(ts) for ts in truth_sentences.values()])))
-        for ts in truth_sentences.values():
-            print(ts)
-            break
+
         print("{} truth sentences read from json. {} objects extracted".format(len(truth), len(truth_sentences)))
         print("{} pred sentences read from json. {} objects extracted".format(len(prediction), len(pred_sentences)))
         
