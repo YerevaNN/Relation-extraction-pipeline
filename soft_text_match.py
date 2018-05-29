@@ -29,13 +29,20 @@ class SoftTextMatch():
                 else:
                     substring_match = self.min_match_ratio
                 #
-                max_ratio = max(max_ratio, substring_match)
+                if max_ratio is not None:
+                    max_ratio = max(max_ratio, substring_match)
+                else:
+                    max_ratio = substring_match
                 if substring_match == max_ratio:
                     is_match = True
             #
             dl_obj = dl.SequenceMatcher(None, curr_term, term)
             curr_ratio = dl_obj.quick_ratio()
-            max_ratio = max(max_ratio, curr_ratio)
+            if max_ratio is not None:
+                max_ratio = max(max_ratio, curr_ratio)
+            else:
+                max_ratio = curr_ratio
+                
             if curr_ratio == max_ratio:
                 is_match = True
         #
@@ -72,7 +79,10 @@ class SoftTextMatch():
             max_ratio4 = self.__match_term__(curr_term.upper(), org_term.upper(), max_ratio)
             #
             curr_max_ratio = max(max_ratio1, max_ratio2, max_ratio3, max_ratio4)
-            max_ratio = max(curr_max_ratio, max_ratio)
+            if max_ratio is not None:
+                max_ratio = max(curr_max_ratio, max_ratio)
+            else:
+                max_ratio = curr_max_ratio
             #
             if max_ratio == curr_max_ratio:
                 max_match_term_idx = curr_term_idx
@@ -90,6 +100,6 @@ if __name__ == '__main__':
     curr_term = 'hello'
     stm_obj = SoftTextMatch()
     match_term, match_term_idx, max_ratio = stm_obj.find_max_match_term(curr_term, terms)
-    print match_term, match_term_idx, max_ratio
+    print(match_term, match_term_idx, max_ratio)
 
 
