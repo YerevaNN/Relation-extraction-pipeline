@@ -14,7 +14,7 @@ from nltk.metrics.distance import edit_distance
 import re
 
 import os
-from subprocess import check_call, check_output
+from subprocess import check_call, check_output, run
 
 
 def ensure_dir(dir):
@@ -50,7 +50,7 @@ def main():
     parser.add_argument('--sdg_model', '-sdg', default='stanford', type=str,
                         choices=['stanford', 'spacy'])
     parser.add_argument('--entity_recognizer', '-er', default='None', type=str, 
-                        choices=['None', 'tagNERv2', 'byteNER'])
+                        choices=['None', 'tagNERv2', 'tagNERv3', 'byteNER'])
     parser.add_argument('--entities_from', type=str)
     parser.add_argument('--anonymize', '-a', action='store_true')
     parser.add_argument('--add_symmetric_pairs', '-sym', action='store_true')
@@ -106,7 +106,42 @@ def main():
                     '--input_iob2', entities_output,
                     '--output_json', args.output_json]) #candidate_tuples_json])
         print('Done\n')
+        
+    elif args.entity_recognizer == 'tagNERv3':
+        
+        tokenized_input = os.path.join(args.tmp_dir, '{}.tokenized.txt'.format(basename))
+        entities_output = os.path.join(args.tmp_dir, '{}.tokenized.txt.IOB'.format(basename))
+        # candidate_tuples_json = os.path.join(args.tmp_dir, '{}.candidates.json'.format(basename))
 
+        print("Tokenizing...")
+        # print("Adding spaces around -")
+        with io.open(args.input_text, encoding='utf-8') as fr:
+            with io.open(tokenized_input, 'w', encoding='utf-8') as fw:
+                for line in fr.readlines():
+                    id, sentence = line[:-1].split('\t')  # \n symbol
+                    #sentence = sentence.replace('-',' - ')
+                    sentence = ' '.join(sentence.split())
+                    fw.write("{}\t{}\n".format(id, sentence))
+
+        print('Running tagNERv3 inside Docker...')
+
+        with open(tokenized_input, 'r') as f_in, open(entities_output, 'w') as f_out:
+            p = run(['nvidia-docker', 'run',
+                                '-i', '--rm',
+                                'yerevann/tag-ner-v3',
+                                '-i', '/dev/stdin',
+                                '-f', 'IOB'],
+                               stdin=f_in, stdout=f_out)
+            
+        print('Done\n')
+        # the output is entities_output
+        print('Building interaction tuples with unknown labels...')
+        check_call(['python', 'iob_to_bind_json.py',
+                    '--input_text', args.input_text,
+                    '--input_iob2', entities_output,
+                    '--output_json', args.output_json]) #candidate_tuples_json])
+        print('Done\n')
+        
     elif args.entity_recognizer == 'byteNER':
         input_without_ids = os.path.join(args.tmp_dir, '{}.noids.txt'.format(basename))
         entities_output = os.path.join(args.tmp_dir, '{}.IOB'.format(basename))
@@ -374,7 +409,7 @@ def main():
                                                    args.classifier_preprocessor)):
             print('Running model number {}'.format(i))
             print('Model filepath: {}'.format(model))
-            check_call(['python',
+            check_call(['python2',
                         'predict.py',
                         '--input_path', before_classifier,
                         '--output_path', after_classifier_format_string.format(i),
