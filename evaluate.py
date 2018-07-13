@@ -1,6 +1,7 @@
 from __future__ import print_function
 from __future__ import division
 
+import io
 import json
 import codecs
 import argparse
@@ -191,7 +192,7 @@ def evaluate_soft_match(gold_tuples, prediction_tuples):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--truth_path', '-t', required=True, type=str)
-    parser.add_argument('--prediction_path', '-p', required=True, type=str)
+    parser.add_argument('--prediction_path', '-p', nargs='*', required=True, type=str)
         
     parser.add_argument('--only', default='', type=str)
     parser.add_argument('--only_bind', action='store_true')
@@ -217,17 +218,22 @@ def main():
     
     positive_labels = [-1, 1] if args.include_negatives else [1]
 
-    with codecs.open(args.truth_path, 'r', encoding='utf-8') as f:
+    with io.open(args.truth_path, 'r', encoding='utf-8') as f:
         truth = json.load(f)
 
-    with codecs.open(args.prediction_path, 'r', encoding='utf-8') as f:
-        prediction = json.load(f)
+    predictions = []
+    for p in args.prediction_path:
+        print(p)
+        with io.open(p, 'r', encoding='utf-8') as f:
+            prediction = json.load(f)
+            predictions.append(prediction)
 
     if args.only_bind:
         args.only = 'bind'
 
         
     if args.multiword != 0:
+        raise Exception("Not implemented in `union` mode")
         # print("Multiword: {}".format(args.multiword))
         filtered_truth = []
         filtered_prediction = []
@@ -243,10 +249,12 @@ def main():
         prediction = filtered_prediction
 
     if args.tags:
+        raise Exception("Not implemented in `union` mode")
         truth = [t for t in truth if tags(t, args.tags)]
         prediction = [p for p in prediction if tags(p, args.tags)]
        
     if args.has_sdg != 0:
+        raise Exception("Not implemented in `union` mode")
         if args.has_sdg == 1:
             has_sdg_filter = lambda x: x['sdg_path'] != ''
         if args.has_sdg == -1:
@@ -258,6 +266,7 @@ def main():
             p['extracted_information'] = [x for x in p['extracted_information'] if has_sdg_filter(x)]
 
     if not args.sentence_level:
+        raise Exception("Not implemented in `union` mode")
         truth_tuples = get_all_tuples(truth, positive_labels, only=args.only)
         prediction_tuples = get_all_tuples(prediction, positive_labels, only=args.only)
 
