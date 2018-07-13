@@ -8,7 +8,9 @@ import itertools
 import re
 from sentence_filters import multiword
 
-def normalize(text):
+def normalize(text, bool_normalize):
+    if not bool_normalize:
+        return text
     text = text.lower()
     tokens = re.split('([-.,;\(\)\s])', text)
     tokens = [s for s in tokens if s.strip() not in ['', ',', '.', '(', ')']]
@@ -26,18 +28,18 @@ def get_all_entities(data):
         for v in data        
     ]
 
-def get_entities(data):
+def get_entities(data, bool_normalize):
     return [
-        e
+        normalize(e, bool_normalize)
         for sentence in data
         for e in sentence['entities']
     ]
 
-def get_sentences(data):
+def get_sentences(data, normalize):
 #    data = data.values()
     data = sorted(data, key=hash_sentence)
     grouped_data = itertools.groupby(data, key=hash_sentence)
-    grouped_data = {key: frozenset(get_entities(data))
+    grouped_data = {key: frozenset(get_entities(data, normalize))
                     for key, data
                     in grouped_data}
     return grouped_data
@@ -54,7 +56,7 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
     for sentence in keys:
         sentence_truth_entities = truth_sentences.get(sentence)
         sentence_pred_entities = pred_sentences.get(sentence, frozenset())
-
+        
         common = sentence_truth_entities.intersection(sentence_pred_entities)
         sentence_TP = len(common)
         sentence_FN = len(sentence_truth_entities) - sentence_TP
@@ -72,6 +74,7 @@ def main():
     parser.add_argument('--prediction_path', '-p', required=True, type=str)
     parser.add_argument('--sentence_level', action='store_true')
     parser.add_argument('--bootstrap_count', default=0, type=int)
+    parser.add_argument('--normalize', '-n', action='store_true')
     
     parser.add_argument('--multiword', default=0, type=int, help='values: +1 or -1')
     args = parser.parse_args()
@@ -87,8 +90,8 @@ def main():
         predictions = [p for p in predictions if multiword(p, args.multiword)]
         
     if args.sentence_level:
-        truth_sentences = get_sentences(truth)
-        pred_sentences = get_sentences(predictions)
+        truth_sentences = get_sentences(truth, args.normalize)
+        pred_sentences = get_sentences(predictions, args.normalize)
         print("{} truth sentences read from json. {} objects extracted".format(len(truth), len(truth_sentences)))
         print("{} pred sentences read from json. {} objects extracted".format(len(predictions), len(pred_sentences)))
         
@@ -128,8 +131,8 @@ def main():
         TP, FN, FP = evaluate_sentences(truth_sentences, pred_sentences)
 
     else:
-        truth_entities = get_all_entities(truth)
-        predicted_entities = get_all_entities(predictions)
+        truth_entities = get_all_entities(truth, args.normalize)
+        predicted_entities = get_all_entities(predictions, args.normalize)
 
         assert(truth_entities)
         assert(predicted_entities)
