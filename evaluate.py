@@ -31,17 +31,13 @@ def normalize_set(interaction_tuple):
 
 
 def hash_sentence(item):
-    if config['match_by'] == 'id':
-        return item['id']
-    elif config['match_by'] == 'line':
-        return item['line']
-    elif config['match_by'] == 'text':
+    if config['match_by'] == 'text':
         text = item['text']
         text = text.lower()
         text = re.sub('[^0-9a-z]+', '', text)
         return hash(text)
     else:
-        raise Exception("Cannot compute hash for sentences")
+        return str(item[config['match_by']])
 
 
 def get_true_tuples(data, positive_labels):
@@ -93,17 +89,18 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
     for id in keys:
         # match unique entities
         if id not in pred_sentences:
-            print("No prediction for sentence with ID=".format(id))
+            print("No prediction for sentence with ID={}".format(id))
             continue
         sp = pred_sentences[id]
         st = truth_sentences[id]
 
         pred_ue_to_truth_ue = {}
 
-        for ue, ue_obj in sp['unique_entities']:
+        for ue, ue_obj in sp['unique_entities'].items():
+            ue = int(ue)
             for ve, ve_obj in ue_obj['versions'].items():
                 if ve in st['entity_map']:
-                    true_ue_id = st['entity_map'][ve]
+                    true_ue_id = int(st['entity_map'][ve])
                     if ue in pred_ue_to_truth_ue and pred_ue_to_truth_ue[ue] != true_ue_id:
                         # another version of this entity cluster was matched to a different cluster
                         entity_version_mismatch += 1
@@ -118,15 +115,18 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
             pa, pb = interaction['participant_ids']
             if pa not in pred_ue_to_truth_ue:
                 fp_interaction_due_to_entity += 1
+                ta = -1
+                tb = -1
             elif pb not in pred_ue_to_truth_ue:
                 fp_interaction_due_to_entity += 1
+                ta = -1
+                tb = -1
             else:
-                predicted_pairs.add(set([
-                    pred_ue_to_truth_ue[pa],
-                    pred_ue_to_truth_ue[pb],
-                ]))
+                ta = pred_ue_to_truth_ue[pa]
+                tb = pred_ue_to_truth_ue[pb]
+            predicted_pairs.add(tuple(sorted([ta, tb])))
 
-        truth_pairs = set([set(i['participant_ids']) for i in st['extracted_information']])
+        truth_pairs = set([tuple(sorted(i['participant_ids'])) for i in st['extracted_information']])
 
         common = truth_pairs.intersection(predicted_pairs)
         sentence_TP = len(common)
@@ -158,8 +158,7 @@ def main():
     parser.add_argument('--has_sdg', default=0, type=int, help='+1 or -1')
 
     parser.add_argument('--sentence_stats', action='store_true')
-    parser.add_argument('--match_by', '-mb', default='id', type=str,
-                        choices=['id', 'text', 'line'])
+    parser.add_argument('--match_by', '-mb', default='id', type=str)
 
     args = parser.parse_args()
 
@@ -234,7 +233,7 @@ def main():
         print("Starting to bootstrap for {} times".format(args.bootstrap_count))
         for i in range(args.bootstrap_count):
             cur_keys = sk_utils.resample(keys, n_samples=len(keys))
-            TP, FN, FP = evaluate_sentences(truth_sentences, pred_sentences, cur_keys)
+            TP, FN, FP, _, _, _  = evaluate_sentences(truth_sentences, pred_sentences, cur_keys)
             precision = TP / (TP + FP)
             recall = TP / (TP + FN)
             fscore = 2 * precision * recall / (precision + recall)
