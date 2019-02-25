@@ -1,3 +1,6 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+
 from __future__ import print_function
 from __future__ import division
 
@@ -40,32 +43,6 @@ def hash_sentence(item):
         return str(item[config['match_by']])
 
 
-def get_true_tuples(data, positive_labels):
-    return [
-        (v['interaction_type'], normalize_set([v['participant_a'], v['participant_b']]))
-        for sentence in data
-        for v in sentence['extracted_information']
-        if v['label'] in positive_labels
-    ]
-
-
-def get_bind_tuples(data):
-    return [
-        interaction_tuple for interaction_type, interaction_tuple
-        in get_true_tuples(data)
-        if interaction_type.startswith('bind')
-    ]
-
-
-def get_all_tuples(data, positive_labels, only=''):
-    return [
-        interaction_tuple
-        for interaction_type, interaction_tuple
-        in get_true_tuples(data, positive_labels)
-        if interaction_type.startswith(only)
-    ]
-
-
 def get_sentences(data):
     #    data = data.values()
     data = {
@@ -74,10 +51,60 @@ def get_sentences(data):
     return data
 
 
+def get_entity_mentions(sentence):
+    return {(ve, mention[0], mention[1])
+                              for ue, ue_obj in sentence['unique_entities'].items()
+                              for ve, ve_obj in ue_obj['versions'].items() if 'mentions' in ve_obj
+                              for mention in ve_obj['mentions']}
+
+class PRFScores:
+    def __init__(self, name):
+        self.name = name
+        self.TP = 0
+        self.FN = 0
+        self.FP = 0
+
+    def add_sets(self, truth_set, prediction_set):
+        common = truth_set.intersection(prediction_set)
+        TP = len(common)
+        FN = len(truth_set) - TP
+        FP = len(prediction_set) - TP
+        self.TP += TP
+        self.FN += FN
+        self.FP += FP
+
+    def return_scores(self):
+        if self.TP + self.FP == 0:
+            precision = 0
+        else:
+            precision = self.TP / (self.TP + self.FP)
+        if self.TP + self.FN == 0:
+            recall = 0
+        else:
+            recall = self.TP / (self.TP + self.FN)
+        if precision + recall == 0:
+            fscore = 0
+        else:
+            fscore = 2 * precision * recall / (precision + recall)
+
+        return precision, recall, fscore
+
+    def print_scores(self):
+        print("\n{}".format(self.name))
+        print("          | Pred 0 | Pred 1")
+        print("   True 0 |        | {:>6}".format(self.FP))
+        print("   True 1 | {:>6} | {:>6}".format(self.FN, self.TP))
+
+        precision, recall, fscore = self.return_scores()
+
+        print("   Precision: {:.2f}% \n   Recall: {:.2f}% \n   F-score: {:.2f}%".format(
+            precision * 100, recall * 100, fscore * 100))
+
+
 def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
-    TP = 0
-    FN = 0
-    FP = 0
+    relation_extraction_score = PRFScores('Relation extraction')
+    entity_mentions_score = PRFScores('Entity mentions')
+    entities_score = PRFScores("Entities")
 
     if keys is None:
         keys = truth_sentences.keys()
@@ -93,6 +120,14 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
             continue
         sp = pred_sentences[id]
         st = truth_sentences[id]
+
+        sp_entity_mentions = get_entity_mentions(sp)
+        st_entity_mentions = get_entity_mentions(st)
+        entity_mentions_score.add_sets(st_entity_mentions, sp_entity_mentions)
+
+        sp_entities = {e for e, start, end in sp_entity_mentions}
+        st_entities = {e for e, start, end in st_entity_mentions}
+        entities_score.add_sets(st_entities, sp_entities)
 
         pred_ue_to_truth_ue = {}
 
@@ -110,6 +145,8 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
                     # this version does not exist in the ground truth
                     fp_entities += 1
 
+        # interactions
+        truth_pairs = set([tuple(sorted(i['participant_ids'])) for i in st['extracted_information']])
         predicted_pairs = set()
         for interaction in sp['extracted_information']:
             pa, pb = interaction['participant_ids']
@@ -126,20 +163,75 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
                 tb = pred_ue_to_truth_ue[pb]
             predicted_pairs.add(tuple(sorted([ta, tb])))
 
-        truth_pairs = set([tuple(sorted(i['participant_ids'])) for i in st['extracted_information']])
-
-        common = truth_pairs.intersection(predicted_pairs)
-        sentence_TP = len(common)
-        sentence_FN = len(truth_pairs) - sentence_TP
-        sentence_FP = len(predicted_pairs) - sentence_TP
-
-        TP += sentence_TP
-        FN += sentence_FN
-        FP += sentence_FP
+        relation_extraction_score.add_sets(truth_pairs, predicted_pairs)
 
         # TODO: check labels!
 
-    return TP, FN, FP, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity
+    return relation_extraction_score, entity_mentions_score, entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity
+
+
+import sklearn.utils as sk_utils
+class BootstrapEvaluation:
+    def __init__(self, truth_objects, prediction_objects, evaluate_fn, bootstrap_count):
+        self.bootstrap_count = bootstrap_count
+        self.truth = truth_objects
+        self.prediction = prediction_objects
+        self.evaluate_fn = evaluate_fn
+        self.runs = {}
+
+    def initialize_runs(self, name):
+        self.runs[name] = {
+            "precision": [],
+            "recall": [],
+            "fscore": []
+        }
+
+    def add_run(self, score):
+        precision, recall, fscore = score.return_scores()
+        self.runs[score.name]['precision'].append(precision)
+        self.runs[score.name]['recall'].append(recall)
+        self.runs[score.name]['fscore'].append(fscore)
+
+    def evaluate(self):
+        keys = list(self.truth.keys())
+        print("Starting to bootstrap for {} times".format(self.bootstrap_count))
+        for i in range(self.bootstrap_count):
+            cur_keys = sk_utils.resample(keys, n_samples=len(keys))
+            all_scores = self.evaluate_fn(self.truth, self.prediction, cur_keys)
+            for score in all_scores:
+                if not isinstance(score, PRFScores):
+                    continue
+                if score.name not in self.runs:
+                    self.initialize_runs(score.name)
+                self.add_run(score)
+
+        self.results = {}
+        for score_name, score_data in self.runs.items():
+            self.results[score_name] = {}
+            for score_type, values in score_data.items():
+                self.results[score_name][score_type] = {
+                    'mean': np.mean(values),
+                    'median': np.median(values),
+                    'std': np.std(values),
+                    '2.5%': np.percentile(values, 2.5),
+                    '97.5%': np.percentile(values, 97.5),
+                }
+
+        print("Bootstrapping completed")
+
+        return self.results
+
+    def print_results(self):
+        for score_name, score_obj in self.results.items():
+            print("\n{}".format(score_name))
+            for score_type, score_stats in score_obj.items():
+                print(u"   {:<10} {:.2f} ± {:.2f} ({:.2f} - {:.2f})".format(
+                    score_type,
+                    100 * score_stats['mean'],
+                    100 * score_stats['std'],
+                    100 * score_stats['2.5%'],
+                    100 * score_stats['97.5%'],
+                ))
 
 
 def main():
@@ -222,56 +314,21 @@ def main():
     print("{} pred sentences read from json. {} objects extracted".format(len(prediction), len(pred_sentences)))
 
     if args.bootstrap_count > 0:
-        import numpy as np
-        import sklearn.utils as sk_utils
-        results = {
-            "precision": {"runs": []},
-            "recall": {"runs": []},
-            "fscore": {"runs": []}
-        }
-        keys = list(truth_sentences.keys())
-        print("Starting to bootstrap for {} times".format(args.bootstrap_count))
-        for i in range(args.bootstrap_count):
-            cur_keys = sk_utils.resample(keys, n_samples=len(keys))
-            TP, FN, FP, _, _, _  = evaluate_sentences(truth_sentences, pred_sentences, cur_keys)
-            precision = TP / (TP + FP)
-            recall = TP / (TP + FN)
-            fscore = 2 * precision * recall / (precision + recall)
-            results["precision"]['runs'].append(precision)
-            results["recall"]['runs'].append(recall)
-            results["fscore"]['runs'].append(fscore)
+        be = BootstrapEvaluation(truth_sentences, pred_sentences, evaluate_sentences, args.bootstrap_count)
+        results = be.evaluate()
+        be.print_results()
 
-        for (m, values) in results.items():
-            runs = results[m]['runs']
-            results[m]['mean'] = np.mean(runs)
-            results[m]['median'] = np.median(runs)
-            results[m]['std'] = np.std(runs)
-            results[m]['2.5% percentile'] = np.percentile(runs, 2.5)
-            results[m]['97.5% percentile'] = np.percentile(runs, 97.5)
-            del results[m]['runs']
-
-        print(json.dumps(results, indent=True))
-
-    print("Bootstrapping completed")
-
-    TP, FN, FP, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity = evaluate_sentences(
+    relation_extraction_score, entity_mentions_score, entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity = evaluate_sentences(
         truth_sentences, pred_sentences)
 
-    print("\n")
-    print("True Positive: {}".format(TP))
-    print("False Negative: {}".format(FN))
-    print("False Positive: {}".format(FP))
     print(" ")
     print("FP entities: {}".format(fp_entities))
     print("Entity version mismatch: {}".format(entity_version_mismatch))
     print("FP due to entities: {}".format(fp_interaction_due_to_entity))
 
-    precision = TP / (TP + FP)
-    recall = TP / (TP + FN)
-    fscore = 2 * precision * recall / (precision + recall)
-
-    print("Precision: {:.2f}% \nRecall: {:.2f}% \nF-score: {:.2f}%".format(
-        precision * 100, recall * 100, fscore * 100))
+    relation_extraction_score.print_scores()
+    entity_mentions_score.print_scores()
+    entities_score.print_scores()
 
 
 if __name__ == '__main__':
