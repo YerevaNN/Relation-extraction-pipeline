@@ -2,6 +2,9 @@
 
 * First you need to set up [SciERC](https://bitbucket.org/luanyi/scierc/src) repository.
 
+* Script requirements
+    * [SciSpaCy](https://allenai.github.io/scispacy/)
+
 * For converting the data to the format accepted by SciERC you need to run:
     * `python prepare_input.py --input [the data json] 
     --output [path for saving scierc jsona file] 
