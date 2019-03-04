@@ -70,7 +70,7 @@ def main():
                     entity_mentions = [{
                         "name": x['text'],
                         "label": x['type'],
-                        "mention": [x['start-pos']['offset'], x['end-pos']['offset']],
+                        "mention": [x['start-pos']['offset'], x['end-pos']['offset'] - 1], # -1 is important for END
                         "grounding": x['xrefs'][0]['namespace'] + ':' + x['xrefs'][0]['id']
                     } for x in data_fries['entities']['frames']]
                 else:
