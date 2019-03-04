@@ -57,6 +57,12 @@ def get_entity_mentions(sentence):
                               for ve, ve_obj in ue_obj['versions'].items() if 'mentions' in ve_obj
                               for mention in ve_obj['mentions']}
 
+def get_entity_coreferences(sentence):
+    return {tuple(sorted([ve, ve2]))
+                              for ue, ue_obj in sentence['unique_entities'].items()
+                              for ve, ve_obj in ue_obj['versions'].items() if 'mentions' in ve_obj
+                              for ve2 in ue_obj['versions'].keys() if ve2 != ve}
+
 class PRFScores:
     def __init__(self, name):
         self.name = name
@@ -97,14 +103,18 @@ class PRFScores:
 
         precision, recall, fscore = self.return_scores()
 
-        print("   Precision: {:.2f}% \n   Recall: {:.2f}% \n   F-score: {:.2f}%".format(
+        print("      Precision: {:>5.2f}%\n"
+              "      Recall:    {:>5.2f}% \n"
+              "      F-score:   {:>5.2f}%".format(
             precision * 100, recall * 100, fscore * 100))
 
 
 def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
-    relation_extraction_score = PRFScores('Relation extraction')
-    entity_mentions_score = PRFScores('Entity mentions')
+    relation_extraction_score = PRFScores('Relation Extraction')
+    entity_mentions_score = PRFScores('Entity Mentions')
     entities_score = PRFScores("Entities")
+    entity_coreferences_score = PRFScores("Entity Coreferences")
+    unique_entities_score = PRFScores("Unique Entities")
 
     if keys is None:
         keys = truth_sentences.keys()
@@ -121,13 +131,19 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
         sp = pred_sentences[id]
         st = truth_sentences[id]
 
-        sp_entity_mentions = get_entity_mentions(sp)
         st_entity_mentions = get_entity_mentions(st)
+        sp_entity_mentions = get_entity_mentions(sp)
         entity_mentions_score.add_sets(st_entity_mentions, sp_entity_mentions)
 
-        sp_entities = {e for e, start, end in sp_entity_mentions}
         st_entities = {e for e, start, end in st_entity_mentions}
+        sp_entities = {e for e, start, end in sp_entity_mentions}
         entities_score.add_sets(st_entities, sp_entities)
+
+        st_entity_coreferences = get_entity_coreferences(st)
+        sp_entity_coreferences = get_entity_coreferences(sp)
+        entity_coreferences_score.add_sets(st_entity_coreferences, sp_entity_coreferences)
+        # if len(st_entity_coreferences) or len(sp_entity_coreferences):
+        #     print('!')
 
         pred_ue_to_truth_ue = {}
 
@@ -142,8 +158,13 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
                     else:
                         pred_ue_to_truth_ue[ue] = true_ue_id
                 else:
+                    # pred_ue_to_truth_ue[ue] = -ue
                     # this version does not exist in the ground truth
                     fp_entities += 1
+
+        # st_unique_entities = set([int(x) for x in st['unique_entities'].keys()])
+        # sp_unique_entities = set(pred_ue_to_truth_ue.values())
+        # unique_entities_score.add_sets(st_unique_entities, sp_unique_entities)
 
         # interactions
         truth_pairs = set([tuple(sorted(i['participant_ids'])) for i in st['extracted_information']])
@@ -167,7 +188,7 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
 
         # TODO: check labels!
 
-    return relation_extraction_score, entity_mentions_score, entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity
+    return relation_extraction_score, entity_mentions_score, entities_score, entity_coreferences_score, unique_entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity
 
 
 import sklearn.utils as sk_utils
@@ -223,9 +244,9 @@ class BootstrapEvaluation:
 
     def print_results(self):
         for score_name, score_obj in self.results.items():
-            print("\n{}".format(score_name))
+            print("\n{} (n={})".format(score_name, self.bootstrap_count))
             for score_type, score_stats in score_obj.items():
-                print(u"   {:<10} {:.2f} ± {:.2f} ({:.2f} - {:.2f})".format(
+                print(u"   {:<10} {:>5.2f} ± {:>5.2f} ({:5.2f} - {:5.2f})".format(
                     score_type,
                     100 * score_stats['mean'],
                     100 * score_stats['std'],
@@ -318,7 +339,8 @@ def main():
         results = be.evaluate()
         be.print_results()
 
-    relation_extraction_score, entity_mentions_score, entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity = evaluate_sentences(
+    relation_extraction_score, entity_mentions_score, entities_score, entity_coreferences_score, \
+    unique_entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity = evaluate_sentences(
         truth_sentences, pred_sentences)
 
     print(" ")
@@ -329,6 +351,8 @@ def main():
     relation_extraction_score.print_scores()
     entity_mentions_score.print_scores()
     entities_score.print_scores()
+    unique_entities_score.print_scores()
+    entity_coreferences_score.print_scores()
 
 
 if __name__ == '__main__':
