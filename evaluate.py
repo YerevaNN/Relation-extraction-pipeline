@@ -122,9 +122,6 @@ class PRFScoresFlatMentions(PRFScores):
                                for c_e,c_start,c_end in common
                                if c_start < end and c_end > start and e != c_e}
 
-        if len(P_intersects_with_TP) > 0:
-           print('a')
-
         truth_set -= T_intersects_with_TP
         prediction_set -= P_intersects_with_TP
         # remove the ones that are in a larger entity
@@ -245,6 +242,7 @@ class BootstrapEvaluation:
         self.prediction = prediction_objects
         self.evaluate_fn = evaluate_fn
         self.runs = {}
+        self.results = {}
 
     def initialize_runs(self, name):
         self.runs[name] = {
