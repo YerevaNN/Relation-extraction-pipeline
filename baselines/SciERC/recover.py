@@ -50,10 +50,11 @@ def main():
     absent_entities_in_rel = 0
     for s, o_s in zip(sents, original_sents):
         ws = whitespaces[s['doc_key']]
-        new_s = {
-            'id': s['doc_key']
-        }
         text = o_s['sentences'][0]
+        new_s = {
+            'id': s['doc_key'],
+            'text': join_with_ws(text, ws)
+        }
         entities = {}
         for ner in s['ner'][0]:
             start = ner[0]
