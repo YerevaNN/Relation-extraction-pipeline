@@ -10,9 +10,10 @@ import codecs
 import argparse
 import itertools
 import re
-from sentence_filters import multiword, tags
-import soft_text_match as stm
+#from sentence_filters import multiword, tags
+#import soft_text_match as stm
 import numpy as np
+import sklearn.utils as sk_utils
 
 config = {
     "match_by": None
@@ -109,19 +110,51 @@ class PRFScores:
             precision * 100, recall * 100, fscore * 100))
 
 
+class PRFScoresFlatMentions(PRFScores):
+    def add_sets(self, truth_set, prediction_set):
+        common = truth_set.intersection(prediction_set)
+        TP = len(common)
+        # remove the ones which intersect with TPs
+        T_intersects_with_TP = {(e,start,end) for e,start,end in truth_set
+                               for c_e,c_start,c_end in common
+                               if c_start < end and c_end > start and e != c_e}
+        P_intersects_with_TP = {(e,start,end) for e,start,end in prediction_set
+                               for c_e,c_start,c_end in common
+                               if c_start < end and c_end > start and e != c_e}
+
+        if len(P_intersects_with_TP) > 0:
+           print('a')
+
+        truth_set -= T_intersects_with_TP
+        prediction_set -= P_intersects_with_TP
+        # remove the ones that are in a larger entity
+        T_contains_shorter = {(e1, start1, end1) for e1, start1, end1 in truth_set
+                               for e2, start2, end2 in truth_set
+                               if start1 <= start2 and end2 <= start1 and e1!=e2}
+        P_contains_shorter = {(e1, start1, end1) for e1, start1, end1 in prediction_set
+                               for e2, start2, end2 in prediction_set
+                               if start1 <= start2 and end2 <= start1 and e1!=e2}
+
+        truth_set -= T_contains_shorter
+        prediction_set -= P_contains_shorter
+
+        FN = len(truth_set) - TP
+        FP = len(prediction_set) - TP
+        self.TP += TP
+        self.FN += FN
+        self.FP += FP
+
+
 def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
-    relation_extraction_score = PRFScores('Relation Extraction')
+    relation_extraction_any_score = PRFScores('Relation Extraction (any)')
+    relation_extraction_all_score = PRFScores('Relation Extraction (all)')
     entity_mentions_score = PRFScores('Entity Mentions')
+    entity_mentions_flat_score = PRFScoresFlatMentions('Entity Mentions (flat)')
     entities_score = PRFScores("Entities")
     entity_coreferences_score = PRFScores("Entity Coreferences")
-    unique_entities_score = PRFScores("Unique Entities")
 
     if keys is None:
         keys = truth_sentences.keys()
-
-    fp_entities = 0
-    entity_version_mismatch = 0
-    fp_interaction_due_to_entity = 0
 
     for id in keys:
         # match unique entities
@@ -134,6 +167,7 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
         st_entity_mentions = get_entity_mentions(st)
         sp_entity_mentions = get_entity_mentions(sp)
         entity_mentions_score.add_sets(st_entity_mentions, sp_entity_mentions)
+        entity_mentions_flat_score.add_sets(st_entity_mentions, sp_entity_mentions)
 
         st_entities = {e for e, start, end in st_entity_mentions}
         sp_entities = {e for e, start, end in sp_entity_mentions}
@@ -142,56 +176,68 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
         st_entity_coreferences = get_entity_coreferences(st)
         sp_entity_coreferences = get_entity_coreferences(sp)
         entity_coreferences_score.add_sets(st_entity_coreferences, sp_entity_coreferences)
-        # if len(st_entity_coreferences) or len(sp_entity_coreferences):
-        #     print('!')
 
-        pred_ue_to_truth_ue = {}
-
-        for ue, ue_obj in sp['unique_entities'].items():
-            ue = int(ue)
-            for ve, ve_obj in ue_obj['versions'].items():
-                if ve in st['entity_map']:
-                    true_ue_id = int(st['entity_map'][ve])
-                    if ue in pred_ue_to_truth_ue and pred_ue_to_truth_ue[ue] != true_ue_id:
-                        # another version of this entity cluster was matched to a different cluster
-                        entity_version_mismatch += 1
-                    else:
-                        pred_ue_to_truth_ue[ue] = true_ue_id
-                else:
-                    # pred_ue_to_truth_ue[ue] = -ue
-                    # this version does not exist in the ground truth
-                    fp_entities += 1
+        # pred_ue_to_truth_ue = {}
+        #
+        # for ue, ue_obj in sp['unique_entities'].items():
+        #     ue = int(ue)
+        #     for ve, ve_obj in ue_obj['versions'].items():
+        #         if ve in st['entity_map']:
+        #             true_ue_id = int(st['entity_map'][ve])
+        #             if ue in pred_ue_to_truth_ue and pred_ue_to_truth_ue[ue] != true_ue_id:
+        #                 # another version of this entity cluster was matched to a different cluster
+        #                 entity_version_mismatch += 1
+        #             else:
+        #                 pred_ue_to_truth_ue[ue] = true_ue_id
+        #         else:
+        #             # pred_ue_to_truth_ue[ue] = -ue
+        #             # this version does not exist in the ground truth
+        #             fp_entities += 1
 
         # st_unique_entities = set([int(x) for x in st['unique_entities'].keys()])
         # sp_unique_entities = set(pred_ue_to_truth_ue.values())
         # unique_entities_score.add_sets(st_unique_entities, sp_unique_entities)
 
         # interactions
-        truth_pairs = set([tuple(sorted(i['participant_ids'])) for i in st['extracted_information']])
-        predicted_pairs = set()
-        for interaction in sp['extracted_information']:
-            pa, pb = interaction['participant_ids']
-            if pa not in pred_ue_to_truth_ue:
-                fp_interaction_due_to_entity += 1
-                ta = -1
-                tb = -1
-            elif pb not in pred_ue_to_truth_ue:
-                fp_interaction_due_to_entity += 1
-                ta = -1
-                tb = -1
-            else:
-                ta = pred_ue_to_truth_ue[pa]
-                tb = pred_ue_to_truth_ue[pb]
-            predicted_pairs.add(tuple(sorted([ta, tb])))
+        predicted_pairs_with_names = {tuple(sorted([ve_a, ve_b]))
+                for interaction in sp['extracted_information']
+                for ve_a, ve_obj in sp['unique_entities'][str(interaction['participant_ids'][0])]['versions'].items()
+                for ve_b, ve_obj in sp['unique_entities'][str(interaction['participant_ids'][1])]['versions'].items() }
+        # sometimes duplicates exist
 
-        relation_extraction_score.add_sets(truth_pairs, predicted_pairs)
+        predicted_pairs_with_names_matched = set()
+
+        for interaction in st['extracted_information']:
+            ta, tb = interaction['participant_ids']
+            true_pairs_with_names = {tuple(sorted([ve_a, ve_b]))
+                for ve_a, ve_obj in st['unique_entities'][str(ta)]['versions'].items()
+                for ve_b, ve_obj in st['unique_entities'][str(tb)]['versions'].items() } # no duplicates detected
+
+            intersect = true_pairs_with_names.intersection(predicted_pairs_with_names)
+            predicted_pairs_with_names_matched = predicted_pairs_with_names_matched.union(intersect)
+
+            true_to_add = {tuple(sorted([ta, tb]))}
+            predicted_any_to_add = set()
+            predicted_all_to_add = set()
+
+            if len(intersect) > 0:
+                predicted_any_to_add = true_to_add
+
+            if len(intersect) == len(true_pairs_with_names):
+                predicted_all_to_add = true_to_add
+
+            relation_extraction_any_score.add_sets(true_to_add, predicted_any_to_add)
+            relation_extraction_all_score.add_sets(true_to_add, predicted_all_to_add)
+
+        predicted_pairs_with_names_unmatched = predicted_pairs_with_names - predicted_pairs_with_names_matched
+        relation_extraction_any_score.add_sets(set(), predicted_pairs_with_names_unmatched)
+        relation_extraction_all_score.add_sets(set(), predicted_pairs_with_names_unmatched)
 
         # TODO: check labels!
 
-    return relation_extraction_score, entity_mentions_score, entities_score, entity_coreferences_score, unique_entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity
+    return relation_extraction_any_score, relation_extraction_all_score, entity_mentions_score, entity_mentions_flat_score, entities_score, entity_coreferences_score
 
 
-import sklearn.utils as sk_utils
 class BootstrapEvaluation:
     def __init__(self, truth_objects, prediction_objects, evaluate_fn, bootstrap_count):
         self.bootstrap_count = bootstrap_count
@@ -339,19 +385,14 @@ def main():
         results = be.evaluate()
         be.print_results()
 
-    relation_extraction_score, entity_mentions_score, entities_score, entity_coreferences_score, \
-    unique_entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity = evaluate_sentences(
-        truth_sentences, pred_sentences)
+    relation_extraction_any_score, relation_extraction_all_score, entity_mentions_score, entity_mentions_flat_score, \
+    entities_score, entity_coreferences_score = evaluate_sentences(truth_sentences, pred_sentences)
 
-    print(" ")
-    print("FP entities: {}".format(fp_entities))
-    print("Entity version mismatch: {}".format(entity_version_mismatch))
-    print("FP due to entities: {}".format(fp_interaction_due_to_entity))
-
-    relation_extraction_score.print_scores()
+    relation_extraction_any_score.print_scores()
+    relation_extraction_all_score.print_scores()
     entity_mentions_score.print_scores()
+    entity_mentions_flat_score.print_scores()
     entities_score.print_scores()
-    unique_entities_score.print_scores()
     entity_coreferences_score.print_scores()
 
 
