@@ -6,12 +6,9 @@ from __future__ import division
 
 import io
 import json
-import codecs
 import argparse
-import itertools
 import re
-#from sentence_filters import multiword, tags
-#import soft_text_match as stm
+import tqdm
 import numpy as np
 import sklearn.utils as sk_utils
 
@@ -94,7 +91,11 @@ class PRFScores:
         else:
             fscore = 2 * precision * recall / (precision + recall)
 
-        return precision, recall, fscore
+        return {
+            "precision": precision,
+            "recall": recall,
+            "fscore": fscore
+        }
 
     def print_scores(self):
         print("\n{}".format(self.name))
@@ -102,12 +103,12 @@ class PRFScores:
         print("   True 0 |        | {:>6}".format(self.FP))
         print("   True 1 | {:>6} | {:>6}".format(self.FN, self.TP))
 
-        precision, recall, fscore = self.return_scores()
+        scores = self.return_scores()
 
         print("      Precision: {:>5.2f}%\n"
               "      Recall:    {:>5.2f}% \n"
               "      F-score:   {:>5.2f}%".format(
-            precision * 100, recall * 100, fscore * 100))
+            scores['precision'] * 100, scores['recall'] * 100, scores['fscore'] * 100))
 
 
 class PRFScoresFlatMentions(PRFScores):
@@ -239,65 +240,85 @@ class BootstrapEvaluation:
     def __init__(self, truth_objects, prediction_objects, evaluate_fn, bootstrap_count):
         self.bootstrap_count = bootstrap_count
         self.truth = truth_objects
-        self.prediction = prediction_objects
+        self.prediction_dict = prediction_objects
         self.evaluate_fn = evaluate_fn
         self.runs = {}
         self.results = {}
+        self.score_types = ['precision', 'recall', 'fscore']
 
     def initialize_runs(self, name):
-        self.runs[name] = {
-            "precision": [],
-            "recall": [],
-            "fscore": []
-        }
+        self.runs[name] = {filename: {
+            score_type: []
+            for score_type in self.score_types
+        } for filename in self.prediction_dict.keys()}
 
-    def add_run(self, score):
-        precision, recall, fscore = score.return_scores()
-        self.runs[score.name]['precision'].append(precision)
-        self.runs[score.name]['recall'].append(recall)
-        self.runs[score.name]['fscore'].append(fscore)
+    def add_run(self, filename, score):
+        scores = score.return_scores()
+        for score_type in self.score_types:
+            self.runs[score.name][filename][score_type].append(scores[score_type])
 
     def evaluate(self):
         keys = list(self.truth.keys())
         print("Starting to bootstrap for {} times".format(self.bootstrap_count))
-        for i in range(self.bootstrap_count):
+        for i in tqdm.tqdm(range(self.bootstrap_count)):
             cur_keys = sk_utils.resample(keys, n_samples=len(keys))
-            all_scores = self.evaluate_fn(self.truth, self.prediction, cur_keys)
-            for score in all_scores:
-                if not isinstance(score, PRFScores):
-                    continue
-                if score.name not in self.runs:
-                    self.initialize_runs(score.name)
-                self.add_run(score)
+            for filename, prediction in self.prediction_dict.items():
+                all_scores = self.evaluate_fn(self.truth, prediction, cur_keys)
+                for score in all_scores:
+                    if not isinstance(score, PRFScores):
+                        continue
+                    if score.name not in self.runs:
+                        self.initialize_runs(score.name)
+                    self.add_run(filename, score)
 
         self.results = {}
         for score_name, score_data in self.runs.items():
             self.results[score_name] = {}
-            for score_type, values in score_data.items():
-                self.results[score_name][score_type] = {
-                    'mean': np.mean(values),
-                    'median': np.median(values),
-                    'std': np.std(values),
-                    '2.5%': np.percentile(values, 2.5),
-                    '97.5%': np.percentile(values, 97.5),
-                }
+            for filename in self.prediction_dict.keys():
+                self.results[score_name][filename] = {}
+                for score_type, values in score_data[filename].items():
+                    self.results[score_name][filename][score_type] = {
+                        'mean': np.mean(values),
+                        'median': np.median(values),
+                        'std': np.std(values),
+                        '2.5%': np.percentile(values, 2.5),
+                        '97.5%': np.percentile(values, 97.5),
+                    }
 
         print("Bootstrapping completed")
 
         return self.results
 
     def print_results(self):
+        for filename in self.prediction_dict.keys():
+            print("\n{}".format(filename))
+            for score_name, score_obj in self.results.items():
+                print("   {} (n={})".format(score_name, self.bootstrap_count))
+                for score_type, score_stats in score_obj[filename].items():
+                    print(u"      {:<10} {:>5.2f} ± {:>5.2f} ({:5.2f} - {:5.2f})".format(
+                        score_type,
+                        100 * score_stats['mean'],
+                        100 * score_stats['std'],
+                        100 * score_stats['2.5%'],
+                        100 * score_stats['97.5%'],
+                    ))
+
         for score_name, score_obj in self.results.items():
             print("\n{} (n={})".format(score_name, self.bootstrap_count))
-            for score_type, score_stats in score_obj.items():
-                print(u"   {:<10} {:>5.2f} ± {:>5.2f} ({:5.2f} - {:5.2f})".format(
-                    score_type,
-                    100 * score_stats['mean'],
-                    100 * score_stats['std'],
-                    100 * score_stats['2.5%'],
-                    100 * score_stats['97.5%'],
-                ))
-
+            for score_type in self.score_types:
+                print("   {:<10} {:>23}: ".format(score_type, ' '), end='')
+                for i in range(len(self.prediction_dict)):
+                    print("({}) ".format(i+1), end='')
+                print(" ")
+                for i1, filename1 in enumerate(self.prediction_dict.keys()):
+                    print("   ({}) {:>30}: ".format(i1+1, filename1[-30:]), end='')
+                    for filename2 in self.prediction_dict.keys():
+                        if filename1 == filename2:
+                            cell = ''
+                        else:
+                            cell = len([1 for i in range(self.bootstrap_count) if self.runs[score_name][filename1][score_type][i] >= self.runs[score_name][filename2][score_type][i]])
+                        print("{:>3} ".format(cell), end='')
+                    print(" ")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -328,12 +349,11 @@ def main():
     with io.open(args.truth_path, 'r', encoding='utf-8') as f:
         truth = json.load(f)
 
-    predictions = []
+    predictions = {}
     for p in args.prediction_path:
-        print(p)
         with io.open(p, 'r', encoding='utf-8') as f:
             prediction = json.load(f)
-            predictions.append(prediction)
+            predictions[p] = prediction
 
     if args.only_bind:
         args.only = 'bind'
@@ -372,26 +392,30 @@ def main():
             p['extracted_information'] = [x for x in p['extracted_information'] if has_sdg_filter(x)]
 
     truth_sentences = get_sentences(truth)
-    pred_sentences = get_sentences(prediction)
-    print("Total true relations: {}".format(sum([len(ts) for ts in truth_sentences.values()])))
-
-    print("{} truth sentences read from json. {} objects extracted".format(len(truth), len(truth_sentences)))
-    print("{} pred sentences read from json. {} objects extracted".format(len(prediction), len(pred_sentences)))
+    print("{} truth sentences read from {}. {} objects extracted".format(len(truth), args.truth_path, len(truth_sentences)))
+    pred_sentences_dict = {}
+    for filename, prediction in predictions.items():
+        pred_sentences = get_sentences(prediction)
+        print("{} pred sentences read from {}. {} objects extracted".format(len(prediction), filename, len(pred_sentences)))
+        pred_sentences_dict[filename] = pred_sentences
 
     if args.bootstrap_count > 0:
-        be = BootstrapEvaluation(truth_sentences, pred_sentences, evaluate_sentences, args.bootstrap_count)
+        be = BootstrapEvaluation(truth_sentences, pred_sentences_dict, evaluate_sentences, args.bootstrap_count)
         results = be.evaluate()
         be.print_results()
 
-    relation_extraction_any_score, relation_extraction_all_score, entity_mentions_score, entity_mentions_flat_score, \
-    entities_score, entity_coreferences_score = evaluate_sentences(truth_sentences, pred_sentences)
+    for filename, pred_sentences in pred_sentences_dict.items():
+        print("\n" + "=" * 80)
+        print("Results for {}:".format(filename))
+        relation_extraction_any_score, relation_extraction_all_score, entity_mentions_score, entity_mentions_flat_score, \
+        entities_score, entity_coreferences_score = evaluate_sentences(truth_sentences, pred_sentences)
 
-    relation_extraction_any_score.print_scores()
-    relation_extraction_all_score.print_scores()
-    entity_mentions_score.print_scores()
-    entity_mentions_flat_score.print_scores()
-    entities_score.print_scores()
-    entity_coreferences_score.print_scores()
+        relation_extraction_any_score.print_scores()
+        relation_extraction_all_score.print_scores()
+        entity_mentions_score.print_scores()
+        entity_mentions_flat_score.print_scores()
+        entities_score.print_scores()
+        entity_coreferences_score.print_scores()
 
 
 if __name__ == '__main__':
