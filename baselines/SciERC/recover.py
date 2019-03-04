@@ -51,7 +51,7 @@ def main():
     for s, o_s in zip(sents, original_sents):
         ws = whitespaces[s['doc_key']]
         new_s = {
-            '_line_': s['doc_key']
+            'id': s['doc_key']
         }
         text = o_s['sentences'][0]
         entities = {}

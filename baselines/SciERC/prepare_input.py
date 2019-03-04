@@ -124,9 +124,9 @@ def main():
     with open(output_fname, 'w') as f:
         for d in data:
             s = Sentence(d)
-            whitespaces[str(d['_line_'])] = s.whitespaces
+            whitespaces[str(d['id'])] = s.whitespaces
 
-            scierc_d = dict(doc_key=str(d['_line_']), sentences=[s.sentence],
+            scierc_d = dict(doc_key=str(d['id']), sentences=[s.sentence],
                             ner=[s.ner_list], relations=[s.relations],
                             clusters=s.clusters)
 
