@@ -206,10 +206,17 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
         predicted_pairs_with_names_matched = set()
 
         for interaction in st['extracted_information']:
+            if interaction['contains_implicit_entity']:
+                continue
+            # if 'implicit' in interaction and interaction['implicit']:
+            #     continue
             ta, tb = interaction['participant_ids']
             true_pairs_with_names = {tuple(sorted([ve_a, ve_b]))
-                for ve_a, ve_obj in st['unique_entities'][str(ta)]['versions'].items()
-                for ve_b, ve_obj in st['unique_entities'][str(tb)]['versions'].items() } # no duplicates detected
+                for ve_a, ve_aobj in st['unique_entities'][str(ta)]['versions'].items()
+                                      if ve_aobj['exists'] == True
+                for ve_b, ve_bobj in st['unique_entities'][str(tb)]['versions'].items()
+                                      if ve_bobj['exists'] == True
+                                     } # no duplicates detected
 
             intersect = true_pairs_with_names.intersection(predicted_pairs_with_names)
             predicted_pairs_with_names_matched = predicted_pairs_with_names_matched.union(intersect)
