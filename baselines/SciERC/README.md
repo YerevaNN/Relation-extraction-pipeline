@@ -55,6 +55,8 @@
     * In parallel, run `python evaluator.py scientific_n0.1c0.3r1` for evaluating during training 
     (the main script does *not* do evaluation)
     
+    * We get the best results at around 2000 iterations
+    
     * The following command will produce an output on the dev set:
     
           python write_single.py scientific_n0.1c0.3r1
