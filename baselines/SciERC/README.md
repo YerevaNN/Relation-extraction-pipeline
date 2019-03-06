@@ -8,7 +8,13 @@
 * For converting the data to the format accepted by SciERC you need to run:
     * `python prepare_input.py --input [the data json] 
     --output [path for saving scierc jsona file] 
-    --output_whitespaces [path for saving temprorary file necessary for recovering after prediction]`    
+    --output_whitespaces [path for saving temprorary file necessary for recovering after prediction]`
+
+* If the input is a text file, where every contains the ID of the sentence, a tab character, 
+and the raw text of the sentence, we can use the following command:
+    * `python prepare_input.py --input ../../data/1.0alpha4.test.txt --text_mode 
+    --output ../1.0alpha4.test.scierc.json 
+    --output_whitespace ../1.0alpha4.test.scierc.whitespace`
 
 * Then you need to train the model following the [SciERC](https://bitbucket.org/luanyi/scierc/src) instructions
     * First, we need to generate ELMo vectors using `generate_elmo.py`. 
