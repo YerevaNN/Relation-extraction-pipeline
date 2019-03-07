@@ -1,6 +1,6 @@
 # SciERC baseline
 
-* First you need to set up [SciERC](https://bitbucket.org/luanyi/scierc/src) repository.
+* First you need to set up YerevaNN's [fork of SciERC](https://github.com/YerevaNN/SciERC) repository.
 
 * Script requirements
     * [SciSpaCy](https://allenai.github.io/scispacy/)
@@ -43,17 +43,17 @@
     
     * Run `./scripts/build_custom_kernels.sh`
     
-    * If the environment is Python 3, `2to3` tool should be used to 
+    * In YerevaNN's fork, we have used `2to3` tool to 
     convert all files to Python 3: `2to3 -w *.py`. 
-    Additionally, `utils.py` has a line which should be converted manually:
+    Additionally, `utils.py` has a line which was converted manually:
     
-        `c.encode("utf-8").strip()` on line 42.
+          c.encode("utf-8").strip()` on line 42.
         
-        Also, `srl_eval_utils.py` should have two changes: 
+      Also, `srl_eval_utils.py` was updated with these two changes: 
         
-        `num_predictions = (k * text_length) // 100`
+          num_predictions = (k * text_length) // 100
         
-        `print("Predicted", list(zip(sorted_starts, sorted_ends, sorted_scores))[:len(gold_spans)])`
+          print("Predicted", list(zip(sorted_starts, sorted_ends, sorted_scores))[:len(gold_spans)])
     
     * Run `python singleton.py scientific_n0.1c0.3r1` for training.
     
@@ -66,11 +66,9 @@
     
           python write_single.py scientific_n0.1c0.3r1
 
-* After training and predicting on a test file you can convert it back to our format using following command: 
-    * `python recover.py --prediction 1.0alpha4.dev.scierc.output.n0.1c0.3r1.json
-    --scierc_input 1.0alpha4.dev.scierc.json
-    --whitespaces 1.0alpha4.dev.scierc.whitespace
-    --output 1.0alpha4.dev.prediction.scierc_n0.1c0.3r1.json`
+* After training and predicting on a test file you can convert it back to our format using following command:
+
+          python recover.py --prediction 1.0alpha4.dev.scierc.output.n0.1c0.3r1.json --scierc_input 1.0alpha4.dev.scierc.json --whitespaces 1.0alpha4.dev.scierc.whitespace --output 1.0alpha4.dev.prediction.scierc_n0.1c0.3r1.json
 
 ### Inference instructions
 
