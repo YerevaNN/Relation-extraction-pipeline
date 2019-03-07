@@ -1,25 +1,24 @@
-# Training SciERC
+# SciERC baseline
 
 * First you need to set up [SciERC](https://bitbucket.org/luanyi/scierc/src) repository.
 
 * Script requirements
     * [SciSpaCy](https://allenai.github.io/scispacy/)
 
+
+### Training instructions
+
 * For converting the data to the format accepted by SciERC you need to run:
     * `python prepare_input.py --input [the data json] 
     --output [path for saving scierc jsona file] 
     --output_whitespaces [path for saving temprorary file necessary for recovering after prediction]`
 
-* If the input is a text file, where every contains the ID of the sentence, a tab character, 
-and the raw text of the sentence, we can use the following command:
-    * `python prepare_input.py --input ../../data/1.0alpha4.test.txt --text_mode 
-    --output ../1.0alpha4.test.scierc.json 
-    --output_whitespace ../1.0alpha4.test.scierc.whitespace`
-
 * Then you need to train the model following the [SciERC](https://bitbucket.org/luanyi/scierc/src) instructions
     * First, we need to generate ELMo vectors using `generate_elmo.py`. 
-    Currently, the filenames are hardcoded in the script. 
-    We have to edit the file for each run. The script produces huge HDF5 files, 
+    ~~Currently, the filenames are hardcoded in the script. 
+    We have to edit the file for each run.~~
+    Filenames can be passed through argparse.
+    The script produces huge HDF5 files, 
     558 / 76 / 162 MB for train/dev/test sets.
     * Then we need to edit `experiments.conf`. 
     * In `glove_300d_filtered` and `glove_300d_2w` set paths to `GloVe` files
@@ -67,9 +66,39 @@ and the raw text of the sentence, we can use the following command:
     
           python write_single.py scientific_n0.1c0.3r1
 
-
 * After training and predicting on a test file you can convert it back to our format using following command: 
     * `python recover.py --prediction 1.0alpha4.dev.scierc.output.n0.1c0.3r1.json
     --scierc_input 1.0alpha4.dev.scierc.json
     --whitespaces 1.0alpha4.dev.scierc.whitespace
     --output 1.0alpha4.dev.prediction.scierc_n0.1c0.3r1.json`
+
+### Inference instructions
+
+* We assume the input is a text file, where every contains the ID of the sentence, a tab character, 
+and the raw text of the sentence.
+* To convert the text file to the format SciERC likes, 
+we use the following command:
+  
+      python prepare_input.py --input ../../data/1.0alpha4.test.txt --text_mode --output 1.0alpha4.test.scierc.json --output_whitespace 1.0alpha4.test.scierc.whitespace`
+
+* We need to generate ELMo vectors:
+
+      python generate_elmo.py --input ../1.0alpha4.test.scierc.json --output ../1.0alpha4.scierc.elmo.hdf5
+      
+* Then, we need to make sure `experiments.conf` has correct values 
+for the following fields:
+          
+      lm_path_dev = "../1.0alpha4.test.scierc.elmo.hdf5"
+      eval_path = "../1.0alpha4.test.scierc.json"
+      output_path = "../1.0alpha4.test.scierc.output.n0.1c0.3r1.json"
+    
+* Finally, the following command will produce an output on our data:
+    
+      python write_single.py scientific_n0.1c0.3r1
+
+* Now we can convert the output back to our JSON format
+
+      python recover.py --prediction 1.0alpha4.test.scierc.output.n0.1c0.3r1.json
+            --scierc_input 1.0alpha4.test.scierc.json
+            --whitespaces 1.0alpha4.test.scierc.whitespace
+            --output 1.0alpha4.test.prediction.scierc_n0.1c0.3r1.json
