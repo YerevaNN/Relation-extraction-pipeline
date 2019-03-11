@@ -98,7 +98,6 @@ for the following fields:
 
 * Now we can convert the output back to our JSON format
 
-      python recover.py --prediction 1.0alpha4.test.scierc.output.n0.1c0.3r1.json
-            --scierc_input 1.0alpha4.test.scierc.json
-            --whitespaces 1.0alpha4.test.scierc.whitespace
-            --output 1.0alpha4.test.prediction.scierc_n0.1c0.3r1.json
+      python recover.py --prediction 1.0alpha4.test.scierc.output.n0.1c0.3r1.json --scierc_input 1.0alpha4.test.scierc.json --whitespaces 1.0alpha4.test.scierc.whitespace --output 1.0alpha4.test.prediction.scierc_n0.1c0.3r1.json
+      
+      
