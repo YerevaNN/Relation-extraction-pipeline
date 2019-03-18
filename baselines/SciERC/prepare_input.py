@@ -51,9 +51,9 @@ class Sentence:
         for unique_ent_id in self.data['unique_entities']:
             unique_ent = self.data['unique_entities'][unique_ent_id]
             for entity in unique_ent['versions'].values():
-                if not entity['exists']:
+                if 'exists' in entity and not entity['exists']:
                     continue
-                if entity['labels_major']:
+                if 'labels_major' in entity and entity['labels_major']:
                     ent_type = entity['labels_major'][0]
                 else:
                     ent_type = 'other'  # ideally shouldn't be necessary
@@ -93,7 +93,7 @@ class Sentence:
 
     def get_relations(self):
         for info in self.data['extracted_information']:
-            if info['contains_implicit_entity']:
+            if 'contains_implicit_entity' in info and info['contains_implicit_entity']:
                 continue
             ent_id_1 = str(info['participant_ids'][0])
             ent_id_2 = str(info['participant_ids'][1])
