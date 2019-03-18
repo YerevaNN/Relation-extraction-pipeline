@@ -67,8 +67,16 @@ class PRFScores:
         self.TP = 0
         self.FN = 0
         self.FP = 0
+        self.by_id = {}
 
-    def add_sets(self, truth_set, prediction_set):
+    def store_by_id(self, id, TP, FN, FP):
+        if id not in self.by_id:
+            self.by_id[id] = PRFScores(self.name)
+        self.by_id[id].TP += TP
+        self.by_id[id].FN += FN
+        self.by_id[id].FP += FP
+
+    def add_sets(self, id, truth_set, prediction_set):
         common = truth_set.intersection(prediction_set)
         TP = len(common)
         FN = len(truth_set) - TP
@@ -76,6 +84,7 @@ class PRFScores:
         self.TP += TP
         self.FN += FN
         self.FP += FP
+        self.store_by_id(id, TP, FN, FP)
 
     def return_scores(self):
         if self.TP + self.FP == 0:
@@ -112,7 +121,7 @@ class PRFScores:
 
 
 class PRFScoresFlatMentions(PRFScores):
-    def add_sets(self, truth_set, prediction_set):
+    def add_sets(self, id, truth_set, prediction_set):
         common = truth_set.intersection(prediction_set)
         TP = len(common)
         # remove the ones which intersect with TPs
@@ -141,6 +150,7 @@ class PRFScoresFlatMentions(PRFScores):
         self.TP += TP
         self.FN += FN
         self.FP += FP
+        self.store_by_id(id, TP, FN, FP)
 
 
 def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
@@ -164,16 +174,16 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
 
         st_entity_mentions = get_entity_mentions(st)
         sp_entity_mentions = get_entity_mentions(sp)
-        entity_mentions_score.add_sets(st_entity_mentions, sp_entity_mentions)
-        entity_mentions_flat_score.add_sets(st_entity_mentions, sp_entity_mentions)
+        entity_mentions_score.add_sets(id, st_entity_mentions, sp_entity_mentions)
+        entity_mentions_flat_score.add_sets(id, st_entity_mentions, sp_entity_mentions)
 
         st_entities = {e for e, start, end in st_entity_mentions}
         sp_entities = {e for e, start, end in sp_entity_mentions}
-        entities_score.add_sets(st_entities, sp_entities)
+        entities_score.add_sets(id, st_entities, sp_entities)
 
         st_entity_coreferences = get_entity_coreferences(st)
         sp_entity_coreferences = get_entity_coreferences(sp)
-        entity_coreferences_score.add_sets(st_entity_coreferences, sp_entity_coreferences)
+        entity_coreferences_score.add_sets(id, st_entity_coreferences, sp_entity_coreferences)
 
         # pred_ue_to_truth_ue = {}
         #
@@ -231,12 +241,12 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
             if len(intersect) == len(true_pairs_with_names):
                 predicted_all_to_add = true_to_add
 
-            relation_extraction_any_score.add_sets(true_to_add, predicted_any_to_add)
-            relation_extraction_all_score.add_sets(true_to_add, predicted_all_to_add)
+            relation_extraction_any_score.add_sets(id, true_to_add, predicted_any_to_add)
+            relation_extraction_all_score.add_sets(id, true_to_add, predicted_all_to_add)
 
         predicted_pairs_with_names_unmatched = predicted_pairs_with_names - predicted_pairs_with_names_matched
-        relation_extraction_any_score.add_sets(set(), predicted_pairs_with_names_unmatched)
-        relation_extraction_all_score.add_sets(set(), predicted_pairs_with_names_unmatched)
+        relation_extraction_any_score.add_sets(id, set(), predicted_pairs_with_names_unmatched)
+        relation_extraction_all_score.add_sets(id, set(), predicted_pairs_with_names_unmatched)
 
         # TODO: check labels!
 
@@ -414,16 +424,20 @@ def main():
     for filename, pred_sentences in pred_sentences_dict.items():
         print("\n" + "=" * 80)
         print("Results for {}:".format(filename))
-        relation_extraction_any_score, relation_extraction_all_score, entity_mentions_score, entity_mentions_flat_score, \
-        entities_score, entity_coreferences_score = evaluate_sentences(truth_sentences, pred_sentences)
+        scores = evaluate_sentences(truth_sentences, pred_sentences)
 
-        relation_extraction_any_score.print_scores()
-        relation_extraction_all_score.print_scores()
-        entity_mentions_score.print_scores()
-        entity_mentions_flat_score.print_scores()
-        entities_score.print_scores()
-        entity_coreferences_score.print_scores()
+        for score in scores:
+            score.print_scores()
 
+        sentences_with_scores = []
+        for sentence in pred_sentences.values():
+            sentence['scores'] = {}
+            for score in scores:
+                sentence['scores'][score.name] = score.by_id[hash_sentence(sentence)].return_scores()
+            sentences_with_scores.append(sentence)
+
+        with open(filename + "_scores", 'w') as f:
+            json.dump(sentences_with_scores, f, indent=True)
 
 if __name__ == '__main__':
     main()
