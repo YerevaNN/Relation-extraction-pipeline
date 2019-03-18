@@ -103,7 +103,10 @@ class PRFScores:
         return {
             "precision": precision,
             "recall": recall,
-            "fscore": fscore
+            "fscore": fscore,
+            "TP": self.TP,
+            "FN": self.FN,
+            "FP": self.FP
         }
 
     def print_scores(self):
