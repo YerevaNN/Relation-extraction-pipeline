@@ -2,7 +2,7 @@ import spacy
 import json
 import argparse
 
-nlp = spacy.load('en_core_sci_md')
+nlp = spacy.load('en_core_sci_sm')
 
 
 def int_overlap(a1, b1, a2, b2):
