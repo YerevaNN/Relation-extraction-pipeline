@@ -48,19 +48,19 @@ class Sentence:
                 char_pos += 1
 
     def get_entities(self):
-        for unique_ent_id in self.data['unique_entities']:
-            unique_ent = self.data['unique_entities'][unique_ent_id]
-            for entity in unique_ent['versions'].values():
-                if not entity['exists']:
+        for ent_id, ent in enumerate(self.data['entities']):
+            if not ent['is_mentioned']:
+                continue
+
+            ent_type = ent['label']
+
+            for entity in ent['names'].values():
+                if not entity['is_mentioned']:
                     continue
-                if entity['labels_major']:
-                    ent_type = entity['labels_major'][0]
-                else:
-                    ent_type = 'other'  # ideally shouldn't be necessary
 
                 for mention in entity['mentions']:
                     start = mention[0]
-                    end = mention[1]
+                    end = mention[1] - 1
                     ne_start = None
                     ne_end = None
                     for idx, token in enumerate(self.tokens):
@@ -77,9 +77,9 @@ class Sentence:
                     else:
                         ner_id = self.ner_list.index(ne)
 
-                    if unique_ent_id not in self.ent_ids_to_ner_ids:
-                        self.ent_ids_to_ner_ids[unique_ent_id] = []
-                    self.ent_ids_to_ner_ids[unique_ent_id].append(ner_id)
+                    if ent_id not in self.ent_ids_to_ner_ids:
+                        self.ent_ids_to_ner_ids[ent_id] = set([])
+                    self.ent_ids_to_ner_ids[ent_id].add(ner_id)
 
     def get_clusters(self):
         for ent_id in self.ent_ids_to_ner_ids:
@@ -92,19 +92,17 @@ class Sentence:
             self.clusters.append(cluster)
 
     def get_relations(self):
-        for info in self.data['extracted_information']:
-            if info['contains_implicit_entity']:
-                continue
-            ent_id_1 = str(info['participant_ids'][0])
-            ent_id_2 = str(info['participant_ids'][1])
-            rel_type = [info['interaction_type']]
+        for info in self.data['interactions']:
+            ent_id_1 = info['participants'][0]
+            ent_id_2 = info['participants'][1]
+            rel_type = [info['type']]
 
-            # only one entity from the cluster is annotated in a relation
-            ne_id_1 = self.ent_ids_to_ner_ids[ent_id_1][0]
-            ne_id_2 = self.ent_ids_to_ner_ids[ent_id_2][0]
-            ne_1 = list(self.ner_list[ne_id_1][:2])
-            ne_2 = list(self.ner_list[ne_id_2][:2])
-            self.relations.append(ne_1 + ne_2 + rel_type)
+            for ne_id_1 in self.ent_ids_to_ner_ids[ent_id_1]:
+                for ne_id_2 in self.ent_ids_to_ner_ids[ent_id_2]:
+                    ne_1 = list(self.ner_list[ne_id_1][:2])
+                    ne_2 = list(self.ner_list[ne_id_2][:2])
+                    if (ne_1 + ne_2 + rel_type) not in self.relations:
+                        self.relations.append(ne_1 + ne_2 + rel_type)
 
 
 def main():
@@ -123,13 +121,12 @@ def main():
 
     with open(output_fname, 'w') as f:
         for d in data:
+            doc_key = d['id']
             s = Sentence(d)
-            whitespaces[str(d['id'])] = s.whitespaces
-
-            scierc_d = dict(doc_key=str(d['id']), sentences=[s.sentence],
+            whitespaces[doc_key] = s.whitespaces
+            scierc_d = dict(doc_key=doc_key, sentences=[s.sentence],
                             ner=[s.ner_list], relations=[s.relations],
                             clusters=s.clusters)
-
             f.write(json.dumps(scierc_d) + '\n')
 
     whitespaces_fname = args.output_whitespaces

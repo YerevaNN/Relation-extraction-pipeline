@@ -17,7 +17,7 @@ def mention_tokens_to_chars(mention, tokens, whitespaces):
     token_lens = [len(t) for t in tokens]
     ws_lens = [len(w) for w in whitespaces]
     char_start = sum(token_lens[:token_start]) + sum(ws_lens[:token_start])
-    char_end = sum(token_lens[:token_end + 1]) + sum(ws_lens[:token_end]) - 1
+    char_end = sum(token_lens[:token_end + 1]) + sum(ws_lens[:token_end])
     return char_start, char_end
 
 
@@ -50,11 +50,10 @@ def main():
     absent_entities_in_rel = 0
     for s, o_s in zip(sents, original_sents):
         ws = whitespaces[s['doc_key']]
-        text = o_s['sentences'][0]
         new_s = {
-            'id': s['doc_key'],
-            'text': join_with_ws(text, ws)
+            'id': s['doc_key']
         }
+        text = o_s['sentences'][0]
         entities = {}
         for ner in s['ner'][0]:
             start = ner[0]
@@ -67,7 +66,7 @@ def main():
             }
 
         ent_group_num = 0
-        for cluster in s['coref']:
+        for cluster in s['clusters']:
             for ent in cluster:
                 if tuple(ent) not in entities:
                     absent_entities_in_coref += 1
@@ -75,7 +74,7 @@ def main():
                 entities[tuple(ent)]['cluster'] = ent_group_num
             ent_group_num += 1
 
-        new_s['unique_entities'] = {}
+        new_s['entities'] = {}
         for k in entities:
             if 'cluster' not in entities[k]:
                 entities[k]['cluster'] = ent_group_num
@@ -85,25 +84,25 @@ def main():
             ent_name = entities[k]['text']
             ent_type = entities[k]['type']
 
-            if c not in new_s['unique_entities']:
-                new_s['unique_entities'][c] = {
-                    'versions': {},
-                    'labels_major': [ent_type]
+            if c not in new_s['entities']:
+                new_s['entities'][c] = {
+                    'names': {},
+                    'label': ent_type
                 }
 
             char_mention = mention_tokens_to_chars(k, text, ws)
-            if ent_name not in new_s['unique_entities'][c]['versions']:
-                new_s['unique_entities'][c]['versions'][ent_name] = {
-                    'labels': [ent_type],
-                    'labels_major': [ent_type],
-                    'mentions': [char_mention]
+            if ent_name not in new_s['entities'][c]['names']:
+                new_s['entities'][c]['names'][ent_name] = {
+                    'label': ent_type,
+                    'mentions': [char_mention],
+                    'is_mentioned': True
                 }
             else:
-                new_s['unique_entities'][c]['versions'][ent_name][
-                    'mentions'].append(char_mention)
+                new_s['entities'][c]['names'][ent_name]['mentions'].append(
+                    char_mention)
 
-        new_s['extracted_information'] = []
-        for rel in s['relation'][0]:
+        new_s['interactions'] = []
+        for rel in s['relations'][0]:
             s1 = rel[0]
             e1 = rel[1]
             s2 = rel[2]
@@ -114,18 +113,13 @@ def main():
             int_type = rel[4]
             c1 = entities[(s1, e1)]['cluster']
             c2 = entities[(s2, e2)]['cluster']
-            name_1 = entities[(s1, e1)]['text']
-            name_2 = entities[(s2, e2)]['text']
-            new_s['extracted_information'].append({
-                'contains_implicit_entity': False,
-                'label': 1,
-                'participant_ids': [
+            new_s['interactions'].append({
+                'label': 1,  # TODO discuss
+                'participants': [
                     c1,
                     c2
                 ],
-                'participant_a': name_1,
-                'participant_b': name_2,
-                'interaction_type': int_type
+                'type': int_type
             })
         data.append(new_s)
 
