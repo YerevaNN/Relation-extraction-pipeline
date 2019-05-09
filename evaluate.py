@@ -50,16 +50,16 @@ def get_sentences(data):
 
 
 def get_entity_mentions(sentence):
-    return {(ve, mention[0], mention[1])
-                              for ue, ue_obj in sentence['unique_entities'].items()
-                              for ve, ve_obj in ue_obj['versions'].items() if 'mentions' in ve_obj
-                              for mention in ve_obj['mentions']}
+    return {(en, mention[0], mention[1])
+                              for ue_obj in sentence['entities']
+                              for en, en_obj in ue_obj['names'].items() if 'mentions' in en_obj
+                              for mention in en_obj['mentions']}
 
 def get_entity_coreferences(sentence):
-    return {tuple(sorted([ve, ve2]))
-                              for ue, ue_obj in sentence['unique_entities'].items()
-                              for ve, ve_obj in ue_obj['versions'].items() if 'mentions' in ve_obj
-                              for ve2 in ue_obj['versions'].keys() if ve2 != ve}
+    return {tuple(sorted([en, en2]))
+                              for ue_obj in sentence['entities']
+                              for en, en_obj in ue_obj['names'].items() if 'mentions' in en_obj
+                              for en2 in ue_obj['names'].keys() if en2 != en}
 
 class PRFScores:
     def __init__(self, name):
@@ -210,25 +210,23 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
         # unique_entities_score.add_sets(st_unique_entities, sp_unique_entities)
 
         # interactions
-        predicted_pairs_with_names = {tuple(sorted([ve_a, ve_b]))
-                for interaction in sp['extracted_information']
-                for ve_a, ve_obj in sp['unique_entities'][str(interaction['participant_ids'][0])]['versions'].items()
-                for ve_b, ve_obj in sp['unique_entities'][str(interaction['participant_ids'][1])]['versions'].items() }
+        predicted_pairs_with_names = {tuple(sorted([en_a, en_b]))
+                for interaction in sp['interactions']
+                for en_a, en_obj in sp['entities'][interaction['participants'][0]]['names'].items() if en_obj['is_mentioned']
+                for en_b, en_obj in sp['entities'][interaction['participants'][1]]['names'].items() if en_obj['is_mentioned'] }
         # sometimes duplicates exist
 
         predicted_pairs_with_names_matched = set()
 
-        for interaction in st['extracted_information']:
-            if interaction['contains_implicit_entity']:
-                continue
+        for interaction in st['interactions']:
             # if 'implicit' in interaction and interaction['implicit']:
             #     continue
-            ta, tb = interaction['participant_ids']
-            true_pairs_with_names = {tuple(sorted([ve_a, ve_b]))
-                for ve_a, ve_aobj in st['unique_entities'][str(ta)]['versions'].items()
-                                      if ve_aobj['exists'] == True
-                for ve_b, ve_bobj in st['unique_entities'][str(tb)]['versions'].items()
-                                      if ve_bobj['exists'] == True
+            ta, tb = interaction['participants']
+            true_pairs_with_names = {tuple(sorted([en_a, en_b]))
+                for en_a, en_aobj in st['entities'][ta]['names'].items()
+                                      if en_aobj['is_mentioned'] == True
+                for en_b, en_bobj in st['entities'][tb]['names'].items()
+                                      if en_bobj['is_mentioned'] == True
                                      } # no duplicates detected
 
             intersect = true_pairs_with_names.intersection(predicted_pairs_with_names)
@@ -253,7 +251,7 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
 
         # TODO: check labels!
 
-    return relation_extraction_any_score, relation_extraction_all_score, entity_mentions_score, entity_mentions_flat_score, entities_score, entity_coreferences_score
+    return entity_mentions_score, relation_extraction_all_score#, entity_mentions_flat_score, entities_score, entity_coreferences_score, relation_extraction_any_score
 
 
 class BootstrapEvaluation:
