@@ -70,7 +70,7 @@ def main():
                     entity_mentions = [{
                         "name": x['text'],
                         "label": x['type'],
-                        "mention": [x['start-pos']['offset'], x['end-pos']['offset'] - 1], # -1 is important for END
+                        "mention": [x['start-pos']['offset'], x['end-pos']['offset'] ], # -1 is important for END
                         "grounding": x['xrefs'][0]['namespace'] + ':' + x['xrefs'][0]['id']
                     } for x in data_fries['entities']['frames']]
                 else:
@@ -80,29 +80,27 @@ def main():
                 for mention in entity_mentions:
                     if mention['name'] not in entities:
                         entities[mention['name']] = {
-                            "labels_major": set(),
+                            "label": None,
                             "mentions": [],
-                            "exists": True,
+                            "is_mentioned": True,
                             "grounding": set()
                         }
-                    entities[mention['name']]["labels_major"].add(mention['label'])
+                    entities[mention['name']]["label"] = mention['label']
                     entities[mention['name']]["mentions"].append(mention['mention'])
                     entities[mention['name']]["grounding"].add(mention['grounding'])
 
                 # convert set to list
                 for e, e_obj in entities.items():
-                    e_obj["labels_major"] = list(e_obj["labels_major"])
                     e_obj["grounding"] = list(e_obj["grounding"])
                     if len(e_obj["grounding"]) > 1:
                         print("\nMultiple groundings for the same entity {} (ID={})".format(e, id))
                     e_obj["grounding"] = e_obj["grounding"][0]
 
-                unique_entities = {i: {
-                    "versions": {e:e_obj},
-                    "labels_major": e_obj['labels_major'],
-                    "all_implicit": False,
+                entities = [{
+                    "names": {e:e_obj},
+                    "label": e_obj['label'],
                     "grounding": e_obj["grounding"]
-                } for i, (e, e_obj) in enumerate(entities.items())}
+                } for i, (e, e_obj) in enumerate(entities.items())]
 
                 pairs_from_json = []
                 if 'cards' in data_indexcard:
@@ -117,8 +115,8 @@ def main():
 
                         a_grounding = a['identifier']
                         b_grounding = b['identifier']
-                        a_ids = [ue for ue, ue_obj in unique_entities.items() if ue_obj['grounding'] == a_grounding]
-                        b_ids = [ue for ue, ue_obj in unique_entities.items() if ue_obj['grounding'] == b_grounding]
+                        a_ids = [i for i, e_obj in enumerate(entities) if e_obj['grounding'] == a_grounding]
+                        b_ids = [i for i, e_obj in enumerate(entities) if e_obj['grounding'] == b_grounding]
                         if len(a_ids) != 1:
                             print(u"Participant A {}: {} ids found (ID={})".format(
                                 a['entity_text'],
@@ -132,17 +130,16 @@ def main():
                                 id
                             ))
                         pairs_from_json.append({
-                            "participant_a": a['entity_text'],
-                            "participant_b": b['entity_text'],
-                            "participant_ids": [a_ids[0], b_ids[0]],
+                            # "participant_a": a['entity_text'],
+                            # "participant_b": b['entity_text'],
+                            "participants": [a_ids[0], b_ids[0]],
                             "label": 1,
                             "interaction_type": "bind"
                         })
 
                 output.append({
                     "entities": entities,
-                    "unique_entities": unique_entities,
-                    "extracted_information": pairs_from_json,
+                    "interactions": pairs_from_json,
                     "id": id,
                     "text": sentence
                  })
