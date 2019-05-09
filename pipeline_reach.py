@@ -46,7 +46,7 @@ def main():
             line = line.strip()
             
             id, sentence = line.split('\t')
-            
+
             # this should be doable from a single query...
             # TODO: understand how to parse fries
             while True:
@@ -109,25 +109,31 @@ def main():
                     for card in data_indexcard['cards']:
                         if card['extracted_information']['interaction_type'] != 'binds':
                             continue
-                        a_grounding = card['extracted_information']['participant_a']['identifier']
-                        b_grounding = card['extracted_information']['participant_b']['identifier']
+                        a = card['extracted_information']['participant_a']
+                        b = card['extracted_information']['participant_b']
+                        if isinstance(b, list):
+                            print("ID {}: Found an interaction with {} participant_b objects!".format(id, len(b)))
+                            b = b[0]
+
+                        a_grounding = a['identifier']
+                        b_grounding = b['identifier']
                         a_ids = [ue for ue, ue_obj in unique_entities.items() if ue_obj['grounding'] == a_grounding]
                         b_ids = [ue for ue, ue_obj in unique_entities.items() if ue_obj['grounding'] == b_grounding]
                         if len(a_ids) != 1:
                             print(u"Participant A {}: {} ids found (ID={})".format(
-                                card['extracted_information']['participant_a']['entity_text'],
+                                a['entity_text'],
                                 len(a_ids),
                                 id
                             ))
                         if len(b_ids) != 1:
                             print(u"Participant B {}: {} ids found (ID={})".format(
-                                card['extracted_information']['participant_b']['entity_text'],
+                                b['entity_text'],
                                 len(a_ids),
                                 id
                             ))
                         pairs_from_json.append({
-                            "participant_a": card['extracted_information']['participant_a']['entity_text'],
-                            "participant_b": card['extracted_information']['participant_b']['entity_text'],
+                            "participant_a": a['entity_text'],
+                            "participant_b": b['entity_text'],
                             "participant_ids": [a_ids[0], b_ids[0]],
                             "label": 1,
                             "interaction_type": "bind"
@@ -146,6 +152,7 @@ def main():
                     json.dump(output, output_file, indent=True)
                     
             except Exception as e:
+                raise
                 print(e)
                 print(u"ERROR: Skipping the sentence: {}".format(line))
                 

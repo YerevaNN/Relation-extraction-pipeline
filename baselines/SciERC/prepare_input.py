@@ -2,7 +2,7 @@ import spacy
 import json
 import argparse
 
-nlp = spacy.load('en_core_sci_md')
+nlp = spacy.load('en_core_sci_sm')
 
 
 def int_overlap(a1, b1, a2, b2):
@@ -108,6 +108,7 @@ class Sentence:
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--input', required=True)
+    parser.add_argument('--text_mode', action='store_true', default=False)
     parser.add_argument('--output', required=True)
     parser.add_argument('--output_whitespaces', default=None)
     args = parser.parse_args()
@@ -116,11 +117,23 @@ def main():
     output_fname = args.output
     whitespaces = {}
 
-    with open(input_fname) as f:
-        data = json.load(f)
+    if args.text_mode:
+        with open(input_fname) as f:
+            data = f.readlines()
+    else:
+        with open(input_fname) as f:
+            data = json.load(f)
 
     with open(output_fname, 'w') as f:
         for d in data:
+            if args.text_mode:
+                id, text = d.split('\t')
+                d = {
+                    "id": id,
+                    "text": text,
+                    "entities": {},
+                    "interactions": []
+                }
             doc_key = d['id']
             s = Sentence(d)
             whitespaces[doc_key] = s.whitespaces

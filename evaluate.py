@@ -6,13 +6,11 @@ from __future__ import division
 
 import io
 import json
-import codecs
 import argparse
-import itertools
 import re
-from sentence_filters import multiword, tags
-import soft_text_match as stm
+import tqdm
 import numpy as np
+import sklearn.utils as sk_utils
 
 config = {
     "match_by": None
@@ -69,8 +67,16 @@ class PRFScores:
         self.TP = 0
         self.FN = 0
         self.FP = 0
+        self.by_id = {}
 
-    def add_sets(self, truth_set, prediction_set):
+    def store_by_id(self, id, TP, FN, FP):
+        if id not in self.by_id:
+            self.by_id[id] = PRFScores(self.name)
+        self.by_id[id].TP += TP
+        self.by_id[id].FN += FN
+        self.by_id[id].FP += FP
+
+    def add_sets(self, id, truth_set, prediction_set):
         common = truth_set.intersection(prediction_set)
         TP = len(common)
         FN = len(truth_set) - TP
@@ -78,6 +84,7 @@ class PRFScores:
         self.TP += TP
         self.FN += FN
         self.FP += FP
+        self.store_by_id(id, TP, FN, FP)
 
     def return_scores(self):
         if self.TP + self.FP == 0:
@@ -93,7 +100,14 @@ class PRFScores:
         else:
             fscore = 2 * precision * recall / (precision + recall)
 
-        return precision, recall, fscore
+        return {
+            "precision": precision,
+            "recall": recall,
+            "fscore": fscore,
+            "TP": self.TP,
+            "FN": self.FN,
+            "FP": self.FP
+        }
 
     def print_scores(self):
         print("\n{}".format(self.name))
@@ -101,27 +115,57 @@ class PRFScores:
         print("   True 0 |        | {:>6}".format(self.FP))
         print("   True 1 | {:>6} | {:>6}".format(self.FN, self.TP))
 
-        precision, recall, fscore = self.return_scores()
+        scores = self.return_scores()
 
         print("      Precision: {:>5.2f}%\n"
               "      Recall:    {:>5.2f}% \n"
               "      F-score:   {:>5.2f}%".format(
-            precision * 100, recall * 100, fscore * 100))
+            scores['precision'] * 100, scores['recall'] * 100, scores['fscore'] * 100))
+
+
+class PRFScoresFlatMentions(PRFScores):
+    def add_sets(self, id, truth_set, prediction_set):
+        common = truth_set.intersection(prediction_set)
+        TP = len(common)
+        # remove the ones which intersect with TPs
+        T_intersects_with_TP = {(e,start,end) for e,start,end in truth_set
+                               for c_e,c_start,c_end in common
+                               if c_start < end and c_end > start and e != c_e}
+        P_intersects_with_TP = {(e,start,end) for e,start,end in prediction_set
+                               for c_e,c_start,c_end in common
+                               if c_start < end and c_end > start and e != c_e}
+
+        truth_set -= T_intersects_with_TP
+        prediction_set -= P_intersects_with_TP
+        # remove the ones that are in a larger entity
+        T_contains_shorter = {(e1, start1, end1) for e1, start1, end1 in truth_set
+                               for e2, start2, end2 in truth_set
+                               if start1 <= start2 and end2 <= start1 and e1!=e2}
+        P_contains_shorter = {(e1, start1, end1) for e1, start1, end1 in prediction_set
+                               for e2, start2, end2 in prediction_set
+                               if start1 <= start2 and end2 <= start1 and e1!=e2}
+
+        truth_set -= T_contains_shorter
+        prediction_set -= P_contains_shorter
+
+        FN = len(truth_set) - TP
+        FP = len(prediction_set) - TP
+        self.TP += TP
+        self.FN += FN
+        self.FP += FP
+        self.store_by_id(id, TP, FN, FP)
 
 
 def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
-    relation_extraction_score = PRFScores('Relation Extraction')
+    relation_extraction_any_score = PRFScores('Relation Extraction (any)')
+    relation_extraction_all_score = PRFScores('Relation Extraction (all)')
     entity_mentions_score = PRFScores('Entity Mentions')
+    entity_mentions_flat_score = PRFScoresFlatMentions('Entity Mentions (flat)')
     entities_score = PRFScores("Entities")
     entity_coreferences_score = PRFScores("Entity Coreferences")
-    unique_entities_score = PRFScores("Unique Entities")
 
     if keys is None:
         keys = truth_sentences.keys()
-
-    fp_entities = 0
-    entity_version_mismatch = 0
-    fp_interaction_due_to_entity = 0
 
     for id in keys:
         # match unique entities
@@ -133,127 +177,168 @@ def evaluate_sentences(truth_sentences, pred_sentences, keys=None):
 
         st_entity_mentions = get_entity_mentions(st)
         sp_entity_mentions = get_entity_mentions(sp)
-        entity_mentions_score.add_sets(st_entity_mentions, sp_entity_mentions)
+        entity_mentions_score.add_sets(id, st_entity_mentions, sp_entity_mentions)
+        entity_mentions_flat_score.add_sets(id, st_entity_mentions, sp_entity_mentions)
 
         st_entities = {e for e, start, end in st_entity_mentions}
         sp_entities = {e for e, start, end in sp_entity_mentions}
-        entities_score.add_sets(st_entities, sp_entities)
+        entities_score.add_sets(id, st_entities, sp_entities)
 
         st_entity_coreferences = get_entity_coreferences(st)
         sp_entity_coreferences = get_entity_coreferences(sp)
-        entity_coreferences_score.add_sets(st_entity_coreferences, sp_entity_coreferences)
-        # if len(st_entity_coreferences) or len(sp_entity_coreferences):
-        #     print('!')
+        entity_coreferences_score.add_sets(id, st_entity_coreferences, sp_entity_coreferences)
 
-        pred_ue_to_truth_ue = {}
-
-        for ue, ue_obj in sp['unique_entities'].items():
-            ue = int(ue)
-            for ve, ve_obj in ue_obj['versions'].items():
-                if ve in st['entity_map']:
-                    true_ue_id = int(st['entity_map'][ve])
-                    if ue in pred_ue_to_truth_ue and pred_ue_to_truth_ue[ue] != true_ue_id:
-                        # another version of this entity cluster was matched to a different cluster
-                        entity_version_mismatch += 1
-                    else:
-                        pred_ue_to_truth_ue[ue] = true_ue_id
-                else:
-                    # pred_ue_to_truth_ue[ue] = -ue
-                    # this version does not exist in the ground truth
-                    fp_entities += 1
+        # pred_ue_to_truth_ue = {}
+        #
+        # for ue, ue_obj in sp['unique_entities'].items():
+        #     ue = int(ue)
+        #     for ve, ve_obj in ue_obj['versions'].items():
+        #         if ve in st['entity_map']:
+        #             true_ue_id = int(st['entity_map'][ve])
+        #             if ue in pred_ue_to_truth_ue and pred_ue_to_truth_ue[ue] != true_ue_id:
+        #                 # another version of this entity cluster was matched to a different cluster
+        #                 entity_version_mismatch += 1
+        #             else:
+        #                 pred_ue_to_truth_ue[ue] = true_ue_id
+        #         else:
+        #             # pred_ue_to_truth_ue[ue] = -ue
+        #             # this version does not exist in the ground truth
+        #             fp_entities += 1
 
         # st_unique_entities = set([int(x) for x in st['unique_entities'].keys()])
         # sp_unique_entities = set(pred_ue_to_truth_ue.values())
         # unique_entities_score.add_sets(st_unique_entities, sp_unique_entities)
 
         # interactions
-        truth_pairs = set([tuple(sorted(i['participant_ids'])) for i in st['extracted_information']])
-        predicted_pairs = set()
-        for interaction in sp['extracted_information']:
-            pa, pb = interaction['participant_ids']
-            if pa not in pred_ue_to_truth_ue:
-                fp_interaction_due_to_entity += 1
-                ta = -1
-                tb = -1
-            elif pb not in pred_ue_to_truth_ue:
-                fp_interaction_due_to_entity += 1
-                ta = -1
-                tb = -1
-            else:
-                ta = pred_ue_to_truth_ue[pa]
-                tb = pred_ue_to_truth_ue[pb]
-            predicted_pairs.add(tuple(sorted([ta, tb])))
+        predicted_pairs_with_names = {tuple(sorted([ve_a, ve_b]))
+                for interaction in sp['extracted_information']
+                for ve_a, ve_obj in sp['unique_entities'][str(interaction['participant_ids'][0])]['versions'].items()
+                for ve_b, ve_obj in sp['unique_entities'][str(interaction['participant_ids'][1])]['versions'].items() }
+        # sometimes duplicates exist
 
-        relation_extraction_score.add_sets(truth_pairs, predicted_pairs)
+        predicted_pairs_with_names_matched = set()
+
+        for interaction in st['extracted_information']:
+            if interaction['contains_implicit_entity']:
+                continue
+            # if 'implicit' in interaction and interaction['implicit']:
+            #     continue
+            ta, tb = interaction['participant_ids']
+            true_pairs_with_names = {tuple(sorted([ve_a, ve_b]))
+                for ve_a, ve_aobj in st['unique_entities'][str(ta)]['versions'].items()
+                                      if ve_aobj['exists'] == True
+                for ve_b, ve_bobj in st['unique_entities'][str(tb)]['versions'].items()
+                                      if ve_bobj['exists'] == True
+                                     } # no duplicates detected
+
+            intersect = true_pairs_with_names.intersection(predicted_pairs_with_names)
+            predicted_pairs_with_names_matched = predicted_pairs_with_names_matched.union(intersect)
+
+            true_to_add = {tuple(sorted([ta, tb]))}
+            predicted_any_to_add = set()
+            predicted_all_to_add = set()
+
+            if len(intersect) > 0:
+                predicted_any_to_add = true_to_add
+
+            if len(intersect) == len(true_pairs_with_names):
+                predicted_all_to_add = true_to_add
+
+            relation_extraction_any_score.add_sets(id, true_to_add, predicted_any_to_add)
+            relation_extraction_all_score.add_sets(id, true_to_add, predicted_all_to_add)
+
+        predicted_pairs_with_names_unmatched = predicted_pairs_with_names - predicted_pairs_with_names_matched
+        relation_extraction_any_score.add_sets(id, set(), predicted_pairs_with_names_unmatched)
+        relation_extraction_all_score.add_sets(id, set(), predicted_pairs_with_names_unmatched)
 
         # TODO: check labels!
 
-    return relation_extraction_score, entity_mentions_score, entities_score, entity_coreferences_score, unique_entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity
+    return relation_extraction_any_score, relation_extraction_all_score, entity_mentions_score, entity_mentions_flat_score, entities_score, entity_coreferences_score
 
 
-import sklearn.utils as sk_utils
 class BootstrapEvaluation:
     def __init__(self, truth_objects, prediction_objects, evaluate_fn, bootstrap_count):
         self.bootstrap_count = bootstrap_count
         self.truth = truth_objects
-        self.prediction = prediction_objects
+        self.prediction_dict = prediction_objects
         self.evaluate_fn = evaluate_fn
         self.runs = {}
+        self.results = {}
+        self.score_types = ['precision', 'recall', 'fscore']
 
     def initialize_runs(self, name):
-        self.runs[name] = {
-            "precision": [],
-            "recall": [],
-            "fscore": []
-        }
+        self.runs[name] = {filename: {
+            score_type: []
+            for score_type in self.score_types
+        } for filename in self.prediction_dict.keys()}
 
-    def add_run(self, score):
-        precision, recall, fscore = score.return_scores()
-        self.runs[score.name]['precision'].append(precision)
-        self.runs[score.name]['recall'].append(recall)
-        self.runs[score.name]['fscore'].append(fscore)
+    def add_run(self, filename, score):
+        scores = score.return_scores()
+        for score_type in self.score_types:
+            self.runs[score.name][filename][score_type].append(scores[score_type])
 
     def evaluate(self):
         keys = list(self.truth.keys())
         print("Starting to bootstrap for {} times".format(self.bootstrap_count))
-        for i in range(self.bootstrap_count):
+        for i in tqdm.tqdm(range(self.bootstrap_count)):
             cur_keys = sk_utils.resample(keys, n_samples=len(keys))
-            all_scores = self.evaluate_fn(self.truth, self.prediction, cur_keys)
-            for score in all_scores:
-                if not isinstance(score, PRFScores):
-                    continue
-                if score.name not in self.runs:
-                    self.initialize_runs(score.name)
-                self.add_run(score)
+            for filename, prediction in self.prediction_dict.items():
+                all_scores = self.evaluate_fn(self.truth, prediction, cur_keys)
+                for score in all_scores:
+                    if not isinstance(score, PRFScores):
+                        continue
+                    if score.name not in self.runs:
+                        self.initialize_runs(score.name)
+                    self.add_run(filename, score)
 
         self.results = {}
         for score_name, score_data in self.runs.items():
             self.results[score_name] = {}
-            for score_type, values in score_data.items():
-                self.results[score_name][score_type] = {
-                    'mean': np.mean(values),
-                    'median': np.median(values),
-                    'std': np.std(values),
-                    '2.5%': np.percentile(values, 2.5),
-                    '97.5%': np.percentile(values, 97.5),
-                }
+            for filename in self.prediction_dict.keys():
+                self.results[score_name][filename] = {}
+                for score_type, values in score_data[filename].items():
+                    self.results[score_name][filename][score_type] = {
+                        'mean': np.mean(values),
+                        'median': np.median(values),
+                        'std': np.std(values),
+                        '2.5%': np.percentile(values, 2.5),
+                        '97.5%': np.percentile(values, 97.5),
+                    }
 
         print("Bootstrapping completed")
 
         return self.results
 
     def print_results(self):
+        for filename in self.prediction_dict.keys():
+            print("\n{}".format(filename))
+            for score_name, score_obj in self.results.items():
+                print("   {} (n={})".format(score_name, self.bootstrap_count))
+                for score_type, score_stats in score_obj[filename].items():
+                    print(u"      {:<10} {:>5.2f} ± {:>5.2f} ({:5.2f} - {:5.2f})".format(
+                        score_type,
+                        100 * score_stats['mean'],
+                        100 * score_stats['std'],
+                        100 * score_stats['2.5%'],
+                        100 * score_stats['97.5%'],
+                    ))
+
         for score_name, score_obj in self.results.items():
             print("\n{} (n={})".format(score_name, self.bootstrap_count))
-            for score_type, score_stats in score_obj.items():
-                print(u"   {:<10} {:>5.2f} ± {:>5.2f} ({:5.2f} - {:5.2f})".format(
-                    score_type,
-                    100 * score_stats['mean'],
-                    100 * score_stats['std'],
-                    100 * score_stats['2.5%'],
-                    100 * score_stats['97.5%'],
-                ))
-
+            for score_type in self.score_types:
+                print("   {:<10} {:>23}: ".format(score_type, ' '), end='')
+                for i in range(len(self.prediction_dict)):
+                    print("({}) ".format(i+1), end='')
+                print(" ")
+                for i1, filename1 in enumerate(self.prediction_dict.keys()):
+                    print("   ({}) {:>30}: ".format(i1+1, filename1[-30:]), end='')
+                    for filename2 in self.prediction_dict.keys():
+                        if filename1 == filename2:
+                            cell = ''
+                        else:
+                            cell = len([1 for i in range(self.bootstrap_count) if self.runs[score_name][filename1][score_type][i] >= self.runs[score_name][filename2][score_type][i]])
+                        print("{:>3} ".format(cell), end='')
+                    print(" ")
 
 def main():
     parser = argparse.ArgumentParser()
@@ -284,12 +369,11 @@ def main():
     with io.open(args.truth_path, 'r', encoding='utf-8') as f:
         truth = json.load(f)
 
-    predictions = []
+    predictions = {}
     for p in args.prediction_path:
-        print(p)
         with io.open(p, 'r', encoding='utf-8') as f:
             prediction = json.load(f)
-            predictions.append(prediction)
+            predictions[p] = prediction
 
     if args.only_bind:
         args.only = 'bind'
@@ -328,32 +412,35 @@ def main():
             p['extracted_information'] = [x for x in p['extracted_information'] if has_sdg_filter(x)]
 
     truth_sentences = get_sentences(truth)
-    pred_sentences = get_sentences(prediction)
-    print("Total true relations: {}".format(sum([len(ts) for ts in truth_sentences.values()])))
-
-    print("{} truth sentences read from json. {} objects extracted".format(len(truth), len(truth_sentences)))
-    print("{} pred sentences read from json. {} objects extracted".format(len(prediction), len(pred_sentences)))
+    print("{} truth sentences read from {}. {} objects extracted".format(len(truth), args.truth_path, len(truth_sentences)))
+    pred_sentences_dict = {}
+    for filename, prediction in predictions.items():
+        pred_sentences = get_sentences(prediction)
+        print("{} pred sentences read from {}. {} objects extracted".format(len(prediction), filename, len(pred_sentences)))
+        pred_sentences_dict[filename] = pred_sentences
 
     if args.bootstrap_count > 0:
-        be = BootstrapEvaluation(truth_sentences, pred_sentences, evaluate_sentences, args.bootstrap_count)
+        be = BootstrapEvaluation(truth_sentences, pred_sentences_dict, evaluate_sentences, args.bootstrap_count)
         results = be.evaluate()
         be.print_results()
 
-    relation_extraction_score, entity_mentions_score, entities_score, entity_coreferences_score, \
-    unique_entities_score, fp_entities, entity_version_mismatch, fp_interaction_due_to_entity = evaluate_sentences(
-        truth_sentences, pred_sentences)
+    for filename, pred_sentences in pred_sentences_dict.items():
+        print("\n" + "=" * 80)
+        print("Results for {}:".format(filename))
+        scores = evaluate_sentences(truth_sentences, pred_sentences)
 
-    print(" ")
-    print("FP entities: {}".format(fp_entities))
-    print("Entity version mismatch: {}".format(entity_version_mismatch))
-    print("FP due to entities: {}".format(fp_interaction_due_to_entity))
+        for score in scores:
+            score.print_scores()
 
-    relation_extraction_score.print_scores()
-    entity_mentions_score.print_scores()
-    entities_score.print_scores()
-    unique_entities_score.print_scores()
-    entity_coreferences_score.print_scores()
+        sentences_with_scores = []
+        for sentence in pred_sentences.values():
+            sentence['scores'] = {}
+            for score in scores:
+                sentence['scores'][score.name] = score.by_id[hash_sentence(sentence)].return_scores()
+            sentences_with_scores.append(sentence)
 
+        with open(filename + "_scores", 'w') as f:
+            json.dump(sentences_with_scores, f, indent=True)
 
 if __name__ == '__main__':
     main()
