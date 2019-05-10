@@ -46,8 +46,6 @@ def main():
         whitespaces = json.load(f)
 
     data = []
-    absent_entities_in_coref = 0
-    absent_entities_in_rel = 0
     for s, o_s in zip(sents, original_sents):
         ws = whitespaces[s['doc_key']]
         new_s = {
@@ -96,9 +94,6 @@ def main():
             for cluster in s['coref']:
                 empty_cluster = True
                 for ent in cluster:
-                    # if tuple(ent) not in entities:
-                    #     absent_entities_in_coref += 1
-                    #     continue
                     if 'cluster' not in entities[tuple(ent)]:
                         entities[tuple(ent)]['cluster'] = ent_group_num
                         empty_cluster = False
@@ -140,9 +135,6 @@ def main():
             e1 = rel[1]
             s2 = rel[2]
             e2 = rel[3]
-            # if (s1, e1) not in entities or (s2, e2) not in entities:
-            #     absent_entities_in_rel += 1
-            #     continue
             int_type = rel[4]
             c1 = entities[(s1, e1)]['cluster']
             c2 = entities[(s2, e2)]['cluster']
@@ -155,10 +147,6 @@ def main():
                 'type': int_type
             })
         data.append(new_s)
-
-    print('Number of absent entities in coreference groups: ',
-          absent_entities_in_coref)
-    print('Number of absent entities in relations: ', absent_entities_in_rel)
 
     with open(output_fname, 'w') as f:
         json.dump(data, f, indent=True)
