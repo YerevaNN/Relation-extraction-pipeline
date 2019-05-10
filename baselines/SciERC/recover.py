@@ -55,24 +55,26 @@ def main():
         }
         text = o_s['sentences'][0]
         entities = {}
-        for ner in s['ner'][0]:
-            start = ner[0]
-            end = ner[1]
-            ent_type = ner[2]
-            t = join_with_ws(text[start:end + 1], ws[start:end + 1])
-            entities[(start, end)] = {
-                'text': t,
-                'type': ent_type
-            }
+        if 'ner' in s:
+            for ner in s['ner'][0]:
+                start = ner[0]
+                end = ner[1]
+                ent_type = ner[2]
+                t = join_with_ws(text[start:end + 1], ws[start:end + 1])
+                entities[(start, end)] = {
+                    'text': t,
+                    'type': ent_type
+                }
 
         # add entities from relations
-        # because SciERC relation extractor can produce entities which were not detected by NER
+        # because SciERC relation extractor can produce entities which
+        # were not detected by NER
         missing_entities = set()
-
-        for cluster in s['coref']:
-            for ent in cluster:
-                if tuple(ent) not in entities:
-                    missing_entities.add(tuple(ent))
+        if 'coref' in s:
+            for cluster in s['coref']:
+                for ent in cluster:
+                    if tuple(ent) not in entities:
+                        missing_entities.add(tuple(ent))
         for rel in s['relation'][0]:
             s1 = rel[0]
             e1 = rel[1]
@@ -82,7 +84,6 @@ def main():
                 missing_entities.add((s1, e1))
             if (s2, e2) not in entities:
                 missing_entities.add((s2, e2))
-
         for start, end in missing_entities:
             t = join_with_ws(text[start:end + 1], ws[start:end + 1])
             entities[(start, end)] = {
@@ -91,13 +92,18 @@ def main():
             }
 
         ent_group_num = 0
-        for cluster in s['clusters']:
-            for ent in cluster:
-                if tuple(ent) not in entities:
-                    absent_entities_in_coref += 1
-                    continue
-                entities[tuple(ent)]['cluster'] = ent_group_num
-            ent_group_num += 1
+        if 'coref' in s:
+            for cluster in s['coref']:
+                empty_cluster = True
+                for ent in cluster:
+                    # if tuple(ent) not in entities:
+                    #     absent_entities_in_coref += 1
+                    #     continue
+                    if 'cluster' not in entities[tuple(ent)]:
+                        entities[tuple(ent)]['cluster'] = ent_group_num
+                        empty_cluster = False
+                if not empty_cluster:
+                    ent_group_num += 1
 
         new_s['entities'] = {}
         for k in entities:
@@ -125,21 +131,23 @@ def main():
             else:
                 new_s['entities'][c]['names'][ent_name]['mentions'].append(
                     char_mention)
+        new_s['entities'] = [new_s['entities'][i] for i in
+                             range(len(new_s['entities']))]
 
         new_s['interactions'] = []
-        for rel in s['relations'][0]:
+        for rel in s['relation'][0]:
             s1 = rel[0]
             e1 = rel[1]
             s2 = rel[2]
             e2 = rel[3]
-            if (s1, e1) not in entities or (s2, e2) not in entities:
-                absent_entities_in_rel += 1
-                continue
+            # if (s1, e1) not in entities or (s2, e2) not in entities:
+            #     absent_entities_in_rel += 1
+            #     continue
             int_type = rel[4]
             c1 = entities[(s1, e1)]['cluster']
             c2 = entities[(s2, e2)]['cluster']
             new_s['interactions'].append({
-                'label': 1,  # TODO discuss
+                'label': 1,
                 'participants': [
                     c1,
                     c2
