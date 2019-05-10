@@ -64,8 +64,8 @@ def main():
                     'type': ent_type
                 }
 
-        # add entities from relations
-        # because SciERC relation extractor can produce entities which
+        # Adding entities from clusters and relations because SciERC relation
+        # extraction and coreference resolution can produce entity spans which
         # were not detected by NER
         missing_entities = set()
         if 'coref' in s:
@@ -73,6 +73,7 @@ def main():
                 for ent in cluster:
                     if tuple(ent) not in entities:
                         missing_entities.add(tuple(ent))
+
         for rel in s['relation'][0]:
             s1 = rel[0]
             e1 = rel[1]
@@ -126,8 +127,7 @@ def main():
             else:
                 new_s['entities'][c]['names'][ent_name]['mentions'].append(
                     char_mention)
-        new_s['entities'] = [new_s['entities'][i] for i in
-                             range(len(new_s['entities']))]
+        new_s['entities'] = [new_s['entities'][i] for i in range(ent_group_num)]
 
         new_s['interactions'] = []
         for rel in s['relation'][0]:
