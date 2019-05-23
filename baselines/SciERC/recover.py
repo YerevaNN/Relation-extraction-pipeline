@@ -48,10 +48,11 @@ def main():
     data = []
     for s, o_s in zip(sents, original_sents):
         ws = whitespaces[s['doc_key']]
-        new_s = {
-            'id': s['doc_key']
-        }
         text = o_s['sentences'][0]
+        new_s = {
+            'id': s['doc_key'],
+            'text': join_with_ws(text, ws)
+        }
         entities = {}
         if 'ner' in s:
             for ner in s['ner'][0]:
