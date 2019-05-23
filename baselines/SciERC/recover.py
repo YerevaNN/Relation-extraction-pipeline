@@ -27,6 +27,7 @@ def main():
     parser.add_argument('--scierc_input', required=True)
     parser.add_argument('--whitespaces', required=True)
     parser.add_argument('--output', required=True)
+    parser.add_argument('--odin_scored', action='store_true')
     args = parser.parse_args()
 
     prediction_fname = args.prediction
@@ -53,6 +54,10 @@ def main():
             'id': s['doc_key'],
             'text': join_with_ws(text, ws)
         }
+        if args.odin_scored:
+            new_s['pb_t_score'] = s['pb_t_score']
+            new_s['pb_t_score_norm'] = s['pb_t_score_norm']
+
         entities = {}
         if 'ner' in s:
             for ner in s['ner'][0]:
